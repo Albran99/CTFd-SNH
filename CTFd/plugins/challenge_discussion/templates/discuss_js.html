@@ -1,0 +1,176 @@
+// Shared JS — included inside an IIFE.
+// Expects: CHALLENGE_ID, POST_TYPE, CURRENT_USER_ID, IS_ADMIN, CSRF_TOKEN, ALLOW_REPLIES
+
+var replyParentId = null;
+var postMap = {};        // id -> post object (all levels)
+var MAX_INDENT = 6;      // max visual indent steps
+var INDENT_PX  = 24;     // pixels per indent level
+
+function renderMarkdown(text) {
+  if (window.marked) {
+    return marked.parse(text || '', {breaks: true, gfm: true});
+  }
+  var d = document.createElement('div');
+  d.appendChild(document.createTextNode(text || ''));
+  return '<span style="white-space:pre-wrap">' + d.innerHTML + '</span>';
+}
+
+function escapeHtml(text) {
+  var d = document.createElement('div');
+  d.appendChild(document.createTextNode(text || ''));
+  return d.innerHTML;
+}
+
+function formatDate(iso) {
+  return new Date(iso).toLocaleString();
+}
+
+// -- Reply context bar --
+
+function showReplyContext(post) {
+  replyParentId = post.id;
+  var bar = document.getElementById('reply-context');
+  var preview = (post.content || '').slice(0, 120) + (post.content && post.content.length > 120 ? '…' : '');
+  bar.innerHTML =
+    '<div class="d-flex justify-content-between align-items-start">' +
+      '<div>' +
+        '<span class="fw-semibold me-2">Replying to ' + escapeHtml(post.username) + ':</span>' +
+        '<span class="text-muted fst-italic">' + escapeHtml(preview) + '</span>' +
+      '</div>' +
+      '<button type="button" class="btn-close ms-3 flex-shrink-0" id="reply-cancel" aria-label="Cancel reply"></button>' +
+    '</div>';
+  bar.classList.remove('d-none');
+  document.getElementById('post-content').focus();
+  document.getElementById('reply-cancel').addEventListener('click', clearReplyContext);
+}
+
+function clearReplyContext() {
+  replyParentId = null;
+  var bar = document.getElementById('reply-context');
+  bar.innerHTML = '';
+  bar.classList.add('d-none');
+}
+
+// -- Recursive tree builder --
+// Returns an HTML string for a post and all its nested replies.
+// depth controls the left-border indentation (capped at MAX_INDENT).
+
+function buildPostHtml(post, depth) {
+  postMap[post.id] = post;
+
+  var indent = Math.min(depth, MAX_INDENT) * INDENT_PX;
+  var borderColor = depth === 0 ? 'transparent' : 'hsl(' + ((depth * 47) % 360) + ',60%,55%)';
+
+  var canDelete = post.user_id === CURRENT_USER_ID || IS_ADMIN;
+  var deleteBtn = canDelete
+    ? '<button class="btn btn-sm btn-outline-danger delete-btn ms-1" data-post-id="' + post.id + '"><i class="fas fa-trash"></i></button>'
+    : '';
+  var replyBtn = ALLOW_REPLIES
+    ? '<button class="btn btn-sm btn-outline-secondary reply-btn me-1" data-post-id="' + post.id + '"><i class="fas fa-reply"></i> Reply</button>'
+    : '';
+
+  var childrenHtml = '';
+  if (post.replies && post.replies.length) {
+    childrenHtml = post.replies.map(function(r) {
+      return buildPostHtml(r, depth + 1);
+    }).join('');
+  }
+
+  var style = depth > 0
+    ? 'margin-left:' + indent + 'px; border-left: 3px solid ' + borderColor + '; padding-left: 10px;'
+    : '';
+
+  return '<div id="post-' + post.id + '" style="' + style + '">' +
+    '<div class="card mb-2">' +
+      '<div class="card-body py-2">' +
+        '<div class="d-flex justify-content-between mb-1">' +
+          '<strong>' + escapeHtml(post.username) + '</strong>' +
+          '<small class="text-muted">' + formatDate(post.date) + '</small>' +
+        '</div>' +
+        '<div class="markdown-body mt-1 mb-2">' + renderMarkdown(post.content) + '</div>' +
+        '<div>' + replyBtn + deleteBtn + '</div>' +
+      '</div>' +
+    '</div>' +
+    childrenHtml +
+  '</div>';
+}
+
+// -- Render all top-level posts --
+
+function renderPosts(posts) {
+  var container = document.getElementById('discussion-posts');
+  if (!posts.length) {
+    container.innerHTML = '<p class="text-muted text-center py-3">No posts yet. Be the first!</p>';
+    return;
+  }
+  postMap = {};
+  container.innerHTML = posts.map(function(p) {
+    return buildPostHtml(p, 0);
+  }).join('');
+
+  // Bind reply buttons (all depths)
+  if (ALLOW_REPLIES) {
+    container.querySelectorAll('.reply-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        var pid = parseInt(btn.dataset.postId);
+        var post = postMap[pid];
+        if (post) showReplyContext(post);
+        document.getElementById('post-form').scrollIntoView({behavior: 'smooth', block: 'center'});
+      });
+    });
+  }
+
+  // Bind delete buttons (all depths)
+  container.querySelectorAll('.delete-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      if (!confirm('Delete this post?')) return;
+      fetch('/api/v1/discussion/posts/' + btn.dataset.postId, {
+        method: 'DELETE',
+        headers: {'Content-Type': 'application/json', 'CSRF-Token': CSRF_TOKEN},
+      }).then(function(r) { return r.json(); }).then(function(data) {
+        if (data.success) {
+          var el = document.getElementById('post-' + btn.dataset.postId);
+          if (el) el.remove();
+        } else {
+          alert(data.errors || 'Delete failed');
+        }
+      });
+    });
+  });
+}
+
+function loadPosts() {
+  fetch('/api/v1/discussion/posts?challenge_id=' + CHALLENGE_ID + '&type=' + POST_TYPE)
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.success) {
+        renderPosts(data.data);
+      } else {
+        document.getElementById('discussion-posts').innerHTML =
+          '<div class="alert alert-danger">' + escapeHtml(data.errors) + '</div>';
+      }
+    });
+}
+
+document.getElementById('post-form').addEventListener('submit', function(e) {
+  e.preventDefault();
+  var content = document.getElementById('post-content').value.trim();
+  if (!content) return;
+  var body = {challenge_id: CHALLENGE_ID, post_type: POST_TYPE, content: content};
+  if (replyParentId) body.parent_id = replyParentId;
+  fetch('/api/v1/discussion/posts', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json', 'CSRF-Token': CSRF_TOKEN},
+    body: JSON.stringify(body),
+  }).then(function(r) { return r.json(); }).then(function(data) {
+    if (data.success) {
+      document.getElementById('post-content').value = '';
+      clearReplyContext();
+      loadPosts();
+    } else {
+      alert(data.errors);
+    }
+  });
+});
+
+loadPosts();

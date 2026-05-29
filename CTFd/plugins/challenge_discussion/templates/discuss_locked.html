@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="jumbotron">
+  <div class="container">
+    <h1>{{ challenge.name }} <span class="badge bg-warning text-dark fs-6">Spoiler Discussion</span></h1>
+    <p class="text-muted">{{ challenge.category }}</p>
+  </div>
+</div>
+<div class="container mt-4">
+  <div class="alert alert-warning text-center">
+    <i class="fas fa-lock fa-2x mb-2"></i><br>
+    <strong>Solve this challenge first to access the spoiler discussion.</strong>
+  </div>
+  <a href="/challenges" class="btn btn-outline-secondary">
+    <i class="fas fa-arrow-left"></i> Back to Challenges
+  </a>
+</div>
+{% endblock %}

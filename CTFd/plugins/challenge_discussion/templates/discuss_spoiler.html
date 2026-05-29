@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="jumbotron">
+  <div class="container">
+    <h1>{{ challenge.name }} <span class="badge bg-warning text-dark fs-6">Spoiler Discussion</span></h1>
+    <p class="text-muted">{{ challenge.category }} &mdash; solvers only</p>
+  </div>
+</div>
+
+<div class="container">
+  <div id="discussion-posts">
+    <div class="text-center py-4"><i class="fas fa-circle-notch fa-spin fa-2x"></i></div>
+  </div>
+  <hr>
+  <div class="card mb-4">
+    <div class="card-header"><strong>Post a spoiler comment</strong> <span class="text-muted small">— markdown supported</span></div>
+    <div class="card-body">
+      <div id="reply-context" class="alert alert-secondary py-2 mb-2 d-none" style="font-size:.9em;"></div>
+      <form id="post-form">
+        <div class="mb-3">
+          <textarea class="form-control font-monospace" id="post-content" rows="5"
+            placeholder="Share hints, full solutions, or writeups... Markdown is supported."></textarea>
+        </div>
+        <button type="submit" class="btn btn-warning">Post</button>
+      </form>
+    </div>
+  </div>
+  <a href="/challenges" class="btn btn-outline-secondary mb-4">
+    <i class="fas fa-arrow-left"></i> Back to Challenges
+  </a>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script>
+(function () {
+  var CHALLENGE_ID = {{ challenge.id }};
+  var POST_TYPE = 'spoiler';
+  var CURRENT_USER_ID = {{ user.id }};
+  var IS_ADMIN = {{ 'true' if user.type == 'admin' else 'false' }};
+  var CSRF_TOKEN = window.init ? window.init.csrfNonce : '';
+  var ALLOW_REPLIES = true;
+
+  {% include "discuss_js.html" %}
+})();
+</script>
+{% endblock %}
