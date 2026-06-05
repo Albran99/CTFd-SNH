@@ -1,0 +1,263 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="jumbotron">
+  <div class="container">
+    <h1>Rubric Configuration</h1>
+    <p class="text-muted">Global grading criteria — applied to all challenge writeups</p>
+  </div>
+</div>
+
+<div class="container">
+
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <p class="text-muted mb-0">
+      Define the criteria used to grade student writeups.
+      Changes take effect immediately but do <strong>not</strong> retroactively alter already-reviewed scores.
+    </p>
+    <a href="/admin/discussion/writeups" class="btn btn-outline-primary btn-sm">
+      <i class="fas fa-list"></i> Writeup Queue
+    </a>
+  </div>
+
+  {# ------------------------------------------------------------------ #}
+  {# Existing criteria table                                             #}
+  {# ------------------------------------------------------------------ #}
+  <div class="card mb-4">
+    <div class="card-header"><strong>Criteria</strong></div>
+    <div class="card-body p-0">
+      <table class="table table-hover mb-0" id="criteria-table">
+        <thead class="table-light">
+          <tr>
+            <th style="width:35%">Name</th>
+            <th style="width:40%">Description</th>
+            <th style="width:12%">Max score</th>
+            <th style="width:13%"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for c in criteria %}
+          <tr id="criterion-row-{{ c.id }}">
+            <td>
+              <span class="criterion-name">{{ c.name }}</span>
+              <input type="text" class="form-control form-control-sm d-none criterion-name-input" value="{{ c.name }}">
+            </td>
+            <td>
+              <span class="criterion-desc text-muted">{{ c.description or '—' }}</span>
+              <input type="text" class="form-control form-control-sm d-none criterion-desc-input" value="{{ c.description or '' }}" placeholder="Optional description for students">
+            </td>
+            <td>
+              <span class="criterion-max">{{ c.max_score }}</span>
+              <input type="number" class="form-control form-control-sm d-none criterion-max-input" value="{{ c.max_score }}" min="1">
+            </td>
+            <td class="text-end">
+              <button class="btn btn-sm btn-outline-secondary edit-btn" data-id="{{ c.id }}">
+                <i class="fas fa-pen"></i>
+              </button>
+              <button class="btn btn-sm btn-outline-success save-btn d-none" data-id="{{ c.id }}">
+                <i class="fas fa-check"></i>
+              </button>
+              <button class="btn btn-sm btn-outline-danger delete-btn ms-1" data-id="{{ c.id }}">
+                <i class="fas fa-trash"></i>
+              </button>
+            </td>
+          </tr>
+          {% else %}
+          <tr id="empty-row">
+            <td colspan="4" class="text-muted text-center py-3">No criteria yet. Add one below.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {# ------------------------------------------------------------------ #}
+  {# Add criterion form                                                  #}
+  {# ------------------------------------------------------------------ #}
+  <div class="card mb-4">
+    <div class="card-header"><strong>Add Criterion</strong></div>
+    <div class="card-body">
+      <form id="add-criterion-form">
+        <div class="row g-3 align-items-end">
+          <div class="col-md-4">
+            <label class="form-label">Name <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" id="new-name" placeholder="e.g. Clarity" required>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Description <span class="text-muted small">(optional)</span></label>
+            <input type="text" class="form-control" id="new-desc" placeholder="Shown to students">
+          </div>
+          <div class="col-md-2">
+            <label class="form-label">Max score <span class="text-danger">*</span></label>
+            <input type="number" class="form-control" id="new-max" value="10" min="1" required>
+          </div>
+          <div class="col-md-2">
+            <button type="submit" class="btn btn-success w-100">
+              <i class="fas fa-plus"></i> Add
+            </button>
+          </div>
+        </div>
+        <div id="add-error" class="alert alert-danger mt-3 d-none"></div>
+      </form>
+    </div>
+  </div>
+
+  <a href="/admin/discussion/writeups" class="btn btn-outline-secondary mb-4">
+    <i class="fas fa-arrow-left"></i> Back to Writeup Queue
+  </a>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  "use strict";
+  var CSRF_TOKEN = window.init ? window.init.csrfNonce : '';
+
+  // ---- Inline edit ----
+  document.querySelectorAll(".edit-btn").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var id = btn.dataset.id;
+      var row = document.getElementById("criterion-row-" + id);
+      row.querySelectorAll(".criterion-name, .criterion-desc, .criterion-max").forEach(function (el) { el.classList.add("d-none"); });
+      row.querySelectorAll(".criterion-name-input, .criterion-desc-input, .criterion-max-input").forEach(function (el) { el.classList.remove("d-none"); });
+      btn.classList.add("d-none");
+      row.querySelector(".save-btn").classList.remove("d-none");
+    });
+  });
+
+  document.querySelectorAll(".save-btn").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var id = btn.dataset.id;
+      var row = document.getElementById("criterion-row-" + id);
+      var name = row.querySelector(".criterion-name-input").value.trim();
+      var desc = row.querySelector(".criterion-desc-input").value.trim();
+      var max  = parseInt(row.querySelector(".criterion-max-input").value);
+      if (!name || isNaN(max) || max < 1) { alert("Name and a positive max score are required."); return; }
+
+      fetch("/api/v1/discussion/rubric/" + id, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", "CSRF-Token": CSRF_TOKEN },
+        body: JSON.stringify({ name: name, description: desc, max_score: max }),
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          if (!data.success) { alert(data.errors || "Save failed"); return; }
+          row.querySelector(".criterion-name").textContent = data.data.name;
+          row.querySelector(".criterion-desc").textContent = data.data.description || "—";
+          row.querySelector(".criterion-max").textContent  = data.data.max_score;
+          row.querySelectorAll(".criterion-name, .criterion-desc, .criterion-max").forEach(function (el) { el.classList.remove("d-none"); });
+          row.querySelectorAll(".criterion-name-input, .criterion-desc-input, .criterion-max-input").forEach(function (el) { el.classList.add("d-none"); });
+          btn.classList.add("d-none");
+          row.querySelector(".edit-btn").classList.remove("d-none");
+        });
+    });
+  });
+
+  // ---- Delete ----
+  document.querySelectorAll(".delete-btn").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      if (!confirm("Delete this criterion? This will not change already-reviewed scores.")) return;
+      var id = btn.dataset.id;
+      fetch("/api/v1/discussion/rubric/" + id, {
+        method: "DELETE",
+        headers: { "CSRF-Token": CSRF_TOKEN },
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          if (data.success) {
+            document.getElementById("criterion-row-" + id).remove();
+            if (!document.querySelector("#criteria-table tbody tr")) {
+              document.querySelector("#criteria-table tbody").innerHTML =
+                '<tr id="empty-row"><td colspan="4" class="text-muted text-center py-3">No criteria yet. Add one below.</td></tr>';
+            }
+          } else {
+            alert(data.errors || "Delete failed");
+          }
+        });
+    });
+  });
+
+  // ---- Add ----
+  document.getElementById("add-criterion-form").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var errBox = document.getElementById("add-error");
+    errBox.classList.add("d-none");
+    var name = document.getElementById("new-name").value.trim();
+    var desc = document.getElementById("new-desc").value.trim();
+    var max  = parseInt(document.getElementById("new-max").value);
+    if (!name || isNaN(max) || max < 1) { errBox.textContent = "Name and a positive max score are required."; errBox.classList.remove("d-none"); return; }
+
+    fetch("/api/v1/discussion/rubric", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "CSRF-Token": CSRF_TOKEN },
+      body: JSON.stringify({ name: name, description: desc, max_score: max }),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (!data.success) { errBox.textContent = data.errors || "Add failed"; errBox.classList.remove("d-none"); return; }
+        var c = data.data;
+        var tbody = document.querySelector("#criteria-table tbody");
+        var empty = document.getElementById("empty-row");
+        if (empty) empty.remove();
+        tbody.insertAdjacentHTML("beforeend",
+          '<tr id="criterion-row-' + c.id + '">' +
+            '<td><span class="criterion-name">' + c.name + '</span>' +
+              '<input type="text" class="form-control form-control-sm d-none criterion-name-input" value="' + c.name + '"></td>' +
+            '<td><span class="criterion-desc text-muted">' + (c.description || "—") + '</span>' +
+              '<input type="text" class="form-control form-control-sm d-none criterion-desc-input" value="' + (c.description || "") + '" placeholder="Optional description for students"></td>' +
+            '<td><span class="criterion-max">' + c.max_score + '</span>' +
+              '<input type="number" class="form-control form-control-sm d-none criterion-max-input" value="' + c.max_score + '" min="1"></td>' +
+            '<td class="text-end">' +
+              '<button class="btn btn-sm btn-outline-secondary edit-btn" data-id="' + c.id + '"><i class="fas fa-pen"></i></button>' +
+              '<button class="btn btn-sm btn-outline-success save-btn d-none" data-id="' + c.id + '"><i class="fas fa-check"></i></button>' +
+              '<button class="btn btn-sm btn-outline-danger delete-btn ms-1" data-id="' + c.id + '"><i class="fas fa-trash"></i></button>' +
+            '</td>' +
+          '</tr>'
+        );
+        // Wire up new row buttons
+        var newRow = document.getElementById("criterion-row-" + c.id);
+        newRow.querySelector(".edit-btn").addEventListener("click", function () {
+          newRow.querySelectorAll(".criterion-name,.criterion-desc,.criterion-max").forEach(function (el) { el.classList.add("d-none"); });
+          newRow.querySelectorAll(".criterion-name-input,.criterion-desc-input,.criterion-max-input").forEach(function (el) { el.classList.remove("d-none"); });
+          newRow.querySelector(".edit-btn").classList.add("d-none");
+          newRow.querySelector(".save-btn").classList.remove("d-none");
+        });
+        newRow.querySelector(".save-btn").addEventListener("click", function () {
+          var nm = newRow.querySelector(".criterion-name-input").value.trim();
+          var ds = newRow.querySelector(".criterion-desc-input").value.trim();
+          var mx = parseInt(newRow.querySelector(".criterion-max-input").value);
+          if (!nm || isNaN(mx) || mx < 1) { alert("Name and a positive max score are required."); return; }
+          fetch("/api/v1/discussion/rubric/" + c.id, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json", "CSRF-Token": CSRF_TOKEN },
+            body: JSON.stringify({ name: nm, description: ds, max_score: mx }),
+          }).then(function (r) { return r.json(); }).then(function (d) {
+            if (!d.success) { alert(d.errors || "Save failed"); return; }
+            newRow.querySelector(".criterion-name").textContent = d.data.name;
+            newRow.querySelector(".criterion-desc").textContent = d.data.description || "—";
+            newRow.querySelector(".criterion-max").textContent  = d.data.max_score;
+            newRow.querySelectorAll(".criterion-name,.criterion-desc,.criterion-max").forEach(function (el) { el.classList.remove("d-none"); });
+            newRow.querySelectorAll(".criterion-name-input,.criterion-desc-input,.criterion-max-input").forEach(function (el) { el.classList.add("d-none"); });
+            newRow.querySelector(".save-btn").classList.add("d-none");
+            newRow.querySelector(".edit-btn").classList.remove("d-none");
+          });
+        });
+        newRow.querySelector(".delete-btn").addEventListener("click", function () {
+          if (!confirm("Delete this criterion?")) return;
+          fetch("/api/v1/discussion/rubric/" + c.id, { method: "DELETE", headers: { "CSRF-Token": CSRF_TOKEN } })
+            .then(function (r) { return r.json(); }).then(function (d) {
+              if (d.success) newRow.remove();
+              else alert(d.errors || "Delete failed");
+            });
+        });
+        document.getElementById("new-name").value = "";
+        document.getElementById("new-desc").value = "";
+        document.getElementById("new-max").value  = "10";
+      });
+  });
+})();
+</script>
+{% endblock %}

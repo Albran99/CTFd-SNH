@@ -1,3 +1,4 @@
 {
-    "name": "Challenge Discussion & Writeups"
+    "name": "Challenge Discussion & Writeups",
+    "route": "/admin/plugins/challenge_discussion"
 }

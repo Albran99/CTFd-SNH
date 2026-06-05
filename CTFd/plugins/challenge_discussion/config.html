@@ -1,0 +1,59 @@
+{% extends "admin/base.html" %}
+
+{% block content %}
+<div class="jumbotron">
+  <div class="container">
+    <h1>Challenge Discussion &amp; Writeups</h1>
+    <p class="text-muted">Per-challenge discussions and graded writeup submissions</p>
+  </div>
+</div>
+
+<div class="container">
+  <div class="row g-4 mb-5">
+
+    <div class="col-md-6">
+      <div class="card h-100">
+        <div class="card-body d-flex flex-column">
+          <h4 class="card-title">
+            <i class="fas fa-list-check text-success me-2"></i>Writeup Review Queue
+          </h4>
+          <p class="card-text text-muted flex-grow-1">
+            Read and grade student writeup submissions. Fill in per-criterion scores,
+            leave comments, and export grades as CSV for your LMS.
+          </p>
+          <a href="/admin/discussion/writeups" class="btn btn-success mt-3">
+            <i class="fas fa-arrow-right me-1"></i> Open Review Queue
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-6">
+      <div class="card h-100">
+        <div class="card-body d-flex flex-column">
+          <h4 class="card-title">
+            <i class="fas fa-sliders text-secondary me-2"></i>Rubric Configuration
+          </h4>
+          <p class="card-text text-muted flex-grow-1">
+            Define the global grading criteria applied to every challenge writeup
+            (e.g. Clarity&nbsp;/5, Completeness&nbsp;/10, Technique&nbsp;/5).
+          </p>
+          <a href="/admin/discussion/rubric" class="btn btn-outline-secondary mt-3">
+            <i class="fas fa-arrow-right me-1"></i> Manage Rubric
+          </a>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <h5 class="mb-3">How it works</h5>
+  <ol class="text-muted">
+    <li class="mb-1">Students solve a challenge and click <strong>Writeup</strong> in the challenge modal.</li>
+    <li class="mb-1">They write up their solution in Markdown — editable until you review it.</li>
+    <li class="mb-1">You open the <strong>Review Queue</strong>, expand a submission, score each criterion, and submit.</li>
+    <li class="mb-1">The student sees their scores and your feedback on their writeup page.</li>
+    <li>All reviewed writeups (content + scores) become visible to every solver of that challenge.</li>
+  </ol>
+</div>
+{% endblock %}

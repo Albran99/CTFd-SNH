@@ -1,10 +1,10 @@
 /**
  * challenge_discussion/assets/js/discussion.js
  *
- * Injects two buttons into the challenge modal footer that navigate
- * in the same tab:
+ * Injects three buttons into the challenge modal footer:
  *   - "General"  → /challenges/{id}/discuss/general  (open to all)
  *   - "Spoiler"  → /challenges/{id}/discuss/spoiler  (solve-gated)
+ *   - "Writeup"  → /challenges/{id}/discuss/writeup  (solve-gated, with rubric grading)
  */
 (function () {
     "use strict";
@@ -38,8 +38,9 @@
             return a;
         }
 
-        footer.appendChild(makeBtn("General discussion",  "fa-comments", "btn-outline-info",    "/challenges/" + challengeId + "/discuss/general"));
-        footer.appendChild(makeBtn("Post solution discussion",  "fa-lock",     "btn-outline-warning", "/challenges/" + challengeId + "/discuss/spoiler"));
+        footer.appendChild(makeBtn("General discussion",  "fa-comments",  "btn-outline-info",    "/challenges/" + challengeId + "/discuss/general"));
+        footer.appendChild(makeBtn("Post solution",       "fa-lock",      "btn-outline-warning", "/challenges/" + challengeId + "/discuss/spoiler"));
+        footer.appendChild(makeBtn("Writeup",             "fa-pen-to-square", "btn-outline-success", "/challenges/" + challengeId + "/discuss/writeup"));
     }
 
     document.addEventListener("shown.bs.modal", function (e) {

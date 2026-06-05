@@ -1,0 +1,415 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="jumbotron">
+  <div class="container">
+    <h1>Writeup Review Queue</h1>
+    <p class="text-muted">Review and grade student writeups across all challenges</p>
+  </div>
+</div>
+
+<div class="container">
+
+  {# ------------------------------------------------------------------ #}
+  {# Toolbar                                                             #}
+  {# ------------------------------------------------------------------ #}
+  <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between mb-4">
+    <div class="d-flex gap-2 align-items-center flex-wrap">
+      <select class="form-select form-select-sm" id="filter-challenge" style="width:auto;">
+        <option value="">All challenges</option>
+        {% for ch in challenges %}
+        <option value="{{ ch.id }}">{{ ch.category }} / {{ ch.name }}</option>
+        {% endfor %}
+      </select>
+      <select class="form-select form-select-sm" id="filter-status" style="width:auto;">
+        <option value="">All statuses</option>
+        <option value="draft">Pending review</option>
+        <option value="reviewed">Reviewed</option>
+      </select>
+      <button class="btn btn-sm btn-outline-secondary" id="apply-filters">
+        <i class="fas fa-filter"></i> Filter
+      </button>
+    </div>
+    <div class="d-flex gap-2">
+      <a href="/admin/discussion/rubric" class="btn btn-sm btn-outline-secondary">
+        <i class="fas fa-sliders"></i> Manage Rubric
+      </a>
+      <button class="btn btn-sm btn-success" id="export-csv-btn">
+        <i class="fas fa-file-csv"></i> Export Grades CSV
+      </button>
+    </div>
+  </div>
+
+  {# Stats strip #}
+  <div class="row g-3 mb-4">
+    <div class="col-sm-4">
+      <div class="card text-center py-3">
+        <div class="display-6 fw-bold" id="stat-total">—</div>
+        <div class="text-muted small">Total writeups</div>
+      </div>
+    </div>
+    <div class="col-sm-4">
+      <div class="card text-center py-3">
+        <div class="display-6 fw-bold text-warning" id="stat-pending">—</div>
+        <div class="text-muted small">Pending review</div>
+      </div>
+    </div>
+    <div class="col-sm-4">
+      <div class="card text-center py-3">
+        <div class="display-6 fw-bold text-success" id="stat-reviewed">—</div>
+        <div class="text-muted small">Reviewed</div>
+      </div>
+    </div>
+  </div>
+
+  {# Writeup list #}
+  <div id="writeups-list">
+    <div class="text-center py-5"><i class="fas fa-circle-notch fa-spin fa-2x"></i></div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  var CSRF_TOKEN = window.init ? window.init.csrfNonce : '';
+  var CRITERIA = {{ criteria_json | tojson }};
+
+  // -------------------------------------------------------------------------
+  // Utilities
+  // -------------------------------------------------------------------------
+
+  function renderMarkdown(text) {
+    if (window.marked) return marked.parse(text || "", { breaks: true, gfm: true });
+    var d = document.createElement("div");
+    d.appendChild(document.createTextNode(text || ""));
+    return "<span style='white-space:pre-wrap'>" + d.innerHTML + "</span>";
+  }
+
+  function escapeHtml(text) {
+    var d = document.createElement("div");
+    d.appendChild(document.createTextNode(text || ""));
+    return d.innerHTML;
+  }
+
+  function formatDate(iso) { return new Date(iso).toLocaleString(); }
+
+  function scoreColor(score, max) {
+    if (max === 0) return "#6c757d";
+    var r = score / max;
+    if (r >= 0.8) return "#198754";
+    if (r >= 0.5) return "#ffc107";
+    return "#dc3545";
+  }
+
+  // -------------------------------------------------------------------------
+  // Build the review form (inline, for pending writeups)
+  // -------------------------------------------------------------------------
+
+  function buildReviewFormHtml(submissionId) {
+    var inputs = CRITERIA.map(function (c) {
+      return (
+        '<div class="mb-2">' +
+          '<label class="form-label mb-1 small fw-semibold">' +
+            escapeHtml(c.name) +
+            (c.description ? ' <span class="text-muted fw-normal">— ' + escapeHtml(c.description) + '</span>' : '') +
+            ' <span class="text-muted">(0–' + c.max_score + ')</span>' +
+          '</label>' +
+          '<input type="number" class="form-control form-control-sm criterion-score-input"' +
+            ' data-criterion-id="' + c.id + '"' +
+            ' min="0" max="' + c.max_score + '" value="0" style="max-width:100px;">' +
+        '</div>'
+      );
+    }).join("");
+
+    if (!CRITERIA.length) {
+      inputs = '<div class="alert alert-warning py-2 small">No rubric criteria defined. ' +
+        '<a href="/admin/discussion/rubric">Add criteria</a> before reviewing.</div>';
+    }
+
+    return (
+      '<div class="review-form mt-3 border-top pt-3">' +
+        '<h6 class="mb-3"><i class="fas fa-star text-warning me-1"></i>Submit Review</h6>' +
+        inputs +
+        '<div class="mb-3 mt-2">' +
+          '<label class="form-label mb-1 small fw-semibold">Overall Comment <span class="text-muted fw-normal">(optional)</span></label>' +
+          '<textarea class="form-control form-control-sm review-comment-input" rows="3"' +
+            ' placeholder="Feedback visible to the student..."></textarea>' +
+        '</div>' +
+        '<button class="btn btn-success btn-sm submit-review-btn" data-submission-id="' + submissionId + '">' +
+          '<i class="fas fa-check"></i> Submit Review' +
+        '</button>' +
+        '<span class="review-submit-status ms-2 text-muted small"></span>' +
+      '</div>'
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // Build the review summary (for already-reviewed writeups)
+  // -------------------------------------------------------------------------
+
+  function buildReviewSummaryHtml(review) {
+    var scoresHtml = (review.scores || []).map(function (s) {
+      var pct = s.max_score > 0 ? Math.round((s.score / s.max_score) * 100) : 0;
+      var color = scoreColor(s.score, s.max_score);
+      return (
+        '<div class="mb-1 d-flex align-items-center gap-2">' +
+          '<span class="small" style="min-width:120px;">' + escapeHtml(s.name) + '</span>' +
+          '<div class="progress flex-grow-1" style="height:8px;">' +
+            '<div class="progress-bar" style="width:' + pct + '%;background-color:' + color + ';"></div>' +
+          '</div>' +
+          '<span class="small fw-bold" style="min-width:50px;color:' + color + '">' + s.score + '/' + s.max_score + '</span>' +
+        '</div>'
+      );
+    }).join("");
+
+    var totalColor = scoreColor(review.total_score, review.max_score);
+    var commentHtml = review.comment
+      ? '<p class="mt-2 mb-0 fst-italic small text-muted">"' + escapeHtml(review.comment) + '"</p>'
+      : "";
+
+    return (
+      '<div class="review-summary mt-3 border-top pt-3 p-3 rounded" style="background:#f8fff9;">' +
+        '<div class="d-flex justify-content-between align-items-center mb-2">' +
+          '<span class="small fw-semibold text-muted text-uppercase">Review</span>' +
+          '<span class="fw-bold" style="color:' + totalColor + '">' +
+            review.total_score + ' / ' + review.max_score +
+          '</span>' +
+        '</div>' +
+        scoresHtml +
+        commentHtml +
+        '<button class="btn btn-outline-secondary btn-sm mt-3 edit-review-btn"' +
+          ' data-submission-id="' + review.submission_id + '">' +
+          '<i class="fas fa-pen"></i> Edit Review' +
+        '</button>' +
+      '</div>'
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // Build a single writeup card
+  // -------------------------------------------------------------------------
+
+  function buildWriteupCardHtml(sub) {
+    var statusBadge = sub.status === "reviewed"
+      ? '<span class="badge bg-success">Reviewed</span>'
+      : '<span class="badge bg-warning text-dark">Pending review</span>';
+
+    var reviewSection = sub.status === "reviewed" && sub.review
+      ? buildReviewSummaryHtml(sub.review)
+      : buildReviewFormHtml(sub.id);
+
+    return (
+      '<div class="card mb-3" id="submission-card-' + sub.id + '">' +
+        '<div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">' +
+          '<div>' +
+            '<span class="badge bg-secondary me-1">' + escapeHtml(sub.challenge_name || "") + '</span>' +
+            '<i class="fas fa-user me-1"></i>' +
+            '<strong>' + escapeHtml(sub.username) + '</strong>' +
+          '</div>' +
+          '<div class="d-flex align-items-center gap-2">' +
+            statusBadge +
+            '<small class="text-muted">' + formatDate(sub.created_at) + '</small>' +
+            '<button class="btn btn-sm btn-outline-secondary toggle-content-btn" data-id="' + sub.id + '">' +
+              '<i class="fas fa-chevron-down"></i> Show writeup' +
+            '</button>' +
+          '</div>' +
+        '</div>' +
+        '<div class="card-body d-none" id="submission-body-' + sub.id + '">' +
+          '<div class="markdown-body mb-3 p-3 bg-light rounded border">' +
+            renderMarkdown(sub.content) +
+          '</div>' +
+          reviewSection +
+        '</div>' +
+      '</div>'
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // Fetch and render writeups
+  // -------------------------------------------------------------------------
+
+  var currentChallengeId = null;
+
+  function loadWriteups() {
+    var challengeFilter = document.getElementById("filter-challenge").value;
+    var statusFilter    = document.getElementById("filter-status").value;
+    currentChallengeId = challengeFilter || null;
+
+    var url = "/api/v1/discussion/writeups";
+    if (challengeFilter) url += "?challenge_id=" + challengeFilter;
+
+    var container = document.getElementById("writeups-list");
+    container.innerHTML = '<div class="text-center py-5"><i class="fas fa-circle-notch fa-spin fa-2x"></i></div>';
+
+    // If no challenge selected, we need to load from all challenges
+    var challenges = [];
+    {% for ch in challenges %}
+    challenges.push({ id: {{ ch.id }}, name: {{ (ch.category + ' / ' + ch.name) | tojson }} });
+    {% endfor %}
+
+    var fetchList = challengeFilter
+      ? [fetch("/api/v1/discussion/writeups?challenge_id=" + challengeFilter).then(function (r) { return r.json(); }).then(function (d) {
+          return (d.data || []).map(function (s) {
+            s.challenge_name = challenges.find(function (c) { return c.id === s.challenge_id; }) && challenges.find(function (c) { return c.id === s.challenge_id; }).name || s.challenge_id;
+            return s;
+          });
+        })]
+      : challenges.map(function (ch) {
+          return fetch("/api/v1/discussion/writeups?challenge_id=" + ch.id)
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+              return (d.data || []).map(function (s) { s.challenge_name = ch.name; return s; });
+            });
+        });
+
+    Promise.all(fetchList).then(function (results) {
+      var all = [].concat.apply([], results);
+
+      // Status filter
+      if (statusFilter) {
+        all = all.filter(function (s) { return s.status === statusFilter; });
+      }
+
+      // Stats
+      var total    = all.length;
+      var pending  = all.filter(function (s) { return s.status !== "reviewed"; }).length;
+      var reviewed = all.filter(function (s) { return s.status === "reviewed"; }).length;
+      document.getElementById("stat-total").textContent    = total;
+      document.getElementById("stat-pending").textContent  = pending;
+      document.getElementById("stat-reviewed").textContent = reviewed;
+
+      if (!all.length) {
+        container.innerHTML = '<p class="text-muted text-center py-5">No writeups found.</p>';
+        return;
+      }
+
+      container.innerHTML = all.map(buildWriteupCardHtml).join("");
+      bindCardEvents();
+    });
+  }
+
+  // -------------------------------------------------------------------------
+  // Bind expand / submit-review / edit-review events
+  // -------------------------------------------------------------------------
+
+  function bindCardEvents() {
+    // Expand / collapse writeup content
+    document.querySelectorAll(".toggle-content-btn").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var body = document.getElementById("submission-body-" + btn.dataset.id);
+        var hidden = body.classList.toggle("d-none");
+        btn.innerHTML = hidden
+          ? '<i class="fas fa-chevron-down"></i> Show writeup'
+          : '<i class="fas fa-chevron-up"></i> Hide writeup';
+      });
+    });
+
+    // Submit review
+    document.querySelectorAll(".submit-review-btn").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        submitReview(btn);
+      });
+    });
+
+    // Edit review — replace summary with form
+    document.querySelectorAll(".edit-review-btn").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var sid = parseInt(btn.dataset.submissionId);
+        var card = document.getElementById("submission-card-" + sid);
+        var summary = card.querySelector(".review-summary");
+        if (!summary) return;
+        summary.outerHTML = buildReviewFormHtml(sid);
+        // Wire up the new submit button
+        var newBtn = card.querySelector(".submit-review-btn");
+        if (newBtn) newBtn.addEventListener("click", function () { submitReview(newBtn); });
+      });
+    });
+  }
+
+  function submitReview(btn) {
+    var sid = parseInt(btn.dataset.submissionId);
+    var card = document.getElementById("submission-card-" + sid);
+    var scores = {};
+    card.querySelectorAll(".criterion-score-input").forEach(function (input) {
+      scores[input.dataset.criterionId] = parseInt(input.value) || 0;
+    });
+    var comment = (card.querySelector(".review-comment-input") || {}).value || "";
+    var statusEl = card.querySelector(".review-submit-status");
+
+    btn.disabled = true;
+    if (statusEl) statusEl.textContent = "Saving…";
+
+    fetch("/api/v1/discussion/writeups/" + sid + "/review", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "CSRF-Token": CSRF_TOKEN },
+      body: JSON.stringify({ scores: scores, comment: comment }),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        btn.disabled = false;
+        if (!data.success) {
+          if (statusEl) statusEl.textContent = "";
+          alert(data.errors || "Review failed");
+          return;
+        }
+        // Replace the review form with the summary in place
+        var reviewArea = card.querySelector(".review-form");
+        if (reviewArea) {
+          reviewArea.outerHTML = buildReviewSummaryHtml(data.data);
+          card.querySelector(".edit-review-btn").addEventListener("click", function () {
+            var summary = card.querySelector(".review-summary");
+            if (summary) {
+              summary.outerHTML = buildReviewFormHtml(sid);
+              var nb = card.querySelector(".submit-review-btn");
+              if (nb) nb.addEventListener("click", function () { submitReview(nb); });
+            }
+          });
+        }
+        // Update status badge
+        var badge = card.querySelector(".badge");
+        if (badge) {
+          badge.className = "badge bg-success";
+          badge.textContent = "Reviewed";
+        }
+        // Update stats
+        var p = parseInt(document.getElementById("stat-pending").textContent) - 1;
+        var r = parseInt(document.getElementById("stat-reviewed").textContent) + 1;
+        if (!isNaN(p)) document.getElementById("stat-pending").textContent  = Math.max(0, p);
+        if (!isNaN(r)) document.getElementById("stat-reviewed").textContent = r;
+      })
+      .catch(function () {
+        btn.disabled = false;
+        if (statusEl) statusEl.textContent = "";
+        alert("Network error. Please try again.");
+      });
+  }
+
+  // -------------------------------------------------------------------------
+  // CSV export
+  // -------------------------------------------------------------------------
+
+  document.getElementById("export-csv-btn").addEventListener("click", function () {
+    var challengeFilter = document.getElementById("filter-challenge").value;
+    var url = "/api/v1/discussion/grades/export";
+    if (challengeFilter) url += "?challenge_id=" + challengeFilter;
+    window.location.href = url;
+  });
+
+  // -------------------------------------------------------------------------
+  // Filters
+  // -------------------------------------------------------------------------
+
+  document.getElementById("apply-filters").addEventListener("click", loadWriteups);
+  document.getElementById("filter-challenge").addEventListener("change", loadWriteups);
+  document.getElementById("filter-status").addEventListener("change", loadWriteups);
+
+  // Initial load
+  loadWriteups();
+})();
+</script>
+{% endblock %}
