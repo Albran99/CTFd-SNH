@@ -217,6 +217,9 @@
             '<button class="btn btn-sm btn-outline-secondary toggle-content-btn" data-id="' + sub.id + '">' +
               '<i class="fas fa-chevron-down"></i> Show writeup' +
             '</button>' +
+            '<button class="btn btn-sm btn-outline-danger delete-writeup-btn" data-id="' + sub.id + '" data-username="' + escapeHtml(sub.username) + '">' +
+              '<i class="fas fa-trash-alt"></i>' +
+            '</button>' +
           '</div>' +
         '</div>' +
         '<div class="card-body d-none" id="submission-body-' + sub.id + '">' +
@@ -313,6 +316,32 @@
     document.querySelectorAll(".submit-review-btn").forEach(function (btn) {
       btn.addEventListener("click", function () {
         submitReview(btn);
+      });
+    });
+
+    // Delete writeup
+    document.querySelectorAll(".delete-writeup-btn").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var sid = parseInt(btn.dataset.id);
+        var username = btn.dataset.username;
+        if (!confirm('Delete writeup by "' + username + '"? This cannot be undone.')) return;
+        fetch("/api/v1/discussion/writeups/" + sid, {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json", "CSRF-Token": CSRF_TOKEN },
+        })
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            if (!data.success) {
+              alert(data.errors || "Delete failed");
+              return;
+            }
+            var card = document.getElementById("submission-card-" + sid);
+            if (card) card.remove();
+            loadWriteups();
+          })
+          .catch(function () {
+            alert("Network error. Please try again.");
+          });
       });
     });
 

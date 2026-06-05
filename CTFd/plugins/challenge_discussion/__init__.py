@@ -115,7 +115,11 @@ class WriteupSubmission(db.Model):
     challenge = db.relationship("Challenges", foreign_keys=[challenge_id], lazy="select")
     user = db.relationship("Users", foreign_keys=[user_id], lazy="select")
     review = db.relationship(
-        "WriteupReview", back_populates="submission", uselist=False, lazy="select"
+        "WriteupReview",
+        back_populates="submission",
+        uselist=False,
+        lazy="select",
+        cascade="all, delete-orphan",
     )
 
     def serialize(self, include_review=False):

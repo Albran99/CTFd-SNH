@@ -103,6 +103,29 @@
   }
 
   // -------------------------------------------------------------------------
+  // Delete a writeup (admin only)
+  // -------------------------------------------------------------------------
+
+  function deleteWriteup(submissionId, cardEl) {
+    if (!confirm("Delete this writeup and its review permanently?")) return;
+    fetch("/api/v1/discussion/writeups/" + submissionId, {
+      method: "DELETE",
+      headers: { "CSRF-Token": CSRF_TOKEN },
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.success) {
+          cardEl.remove();
+          var badge = document.getElementById("reviewed-count");
+          if (badge) badge.textContent = Math.max(0, parseInt(badge.textContent) - 1);
+        } else {
+          alert(data.errors || "Delete failed");
+        }
+      })
+      .catch(function () { alert("Network error. Please try again."); });
+  }
+
+  // -------------------------------------------------------------------------
   // Render the "All reviewed writeups" list
   // -------------------------------------------------------------------------
 
@@ -122,13 +145,22 @@
 
     container.innerHTML = reviewed
       .map(function (sub) {
+        var deleteBtn = IS_ADMIN
+          ? '<button class="btn btn-sm btn-outline-danger delete-writeup-btn ms-2"' +
+              ' data-id="' + sub.id + '">' +
+              '<i class="fas fa-trash"></i>' +
+            '</button>'
+          : "";
         return (
-          '<div class="card mb-4">' +
+          '<div class="card mb-4" id="writeup-card-' + sub.id + '">' +
             '<div class="card-header d-flex justify-content-between align-items-center">' +
               '<span><i class="fas fa-user me-1"></i><strong>' +
                 escapeHtml(sub.username) +
               "</strong></span>" +
-              '<small class="text-muted">' + formatDate(sub.created_at) + "</small>" +
+              '<div class="d-flex align-items-center gap-1">' +
+                '<small class="text-muted">' + formatDate(sub.created_at) + "</small>" +
+                deleteBtn +
+              "</div>" +
             "</div>" +
             '<div class="card-body">' +
               '<div class="markdown-body mb-3">' + renderMarkdown(sub.content) + "</div>" +
@@ -138,6 +170,15 @@
         );
       })
       .join("");
+
+    if (IS_ADMIN) {
+      container.querySelectorAll(".delete-writeup-btn").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          var card = document.getElementById("writeup-card-" + btn.dataset.id);
+          deleteWriteup(parseInt(btn.dataset.id), card);
+        });
+      });
+    }
   }
 
   // -------------------------------------------------------------------------
