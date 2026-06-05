@@ -71,7 +71,84 @@
 {% endblock %}
 
 {% block scripts %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js/styles/atom-one-dark.min.css">
+<style>
+  /* Light mode styles */
+  .hljs {
+    padding: 12px !important;
+    border-radius: 4px;
+    margin: 10px 0;
+    overflow-x: auto;
+  }
+  pre {
+    background-color: #f6f8fa;
+    padding: 12px;
+    border-radius: 4px;
+    margin: 10px 0;
+    border: 1px solid #e1e4e8;
+    color: #24292e;
+  }
+  pre code {
+    color: #24292e;
+  }
+  code {
+    background-color: #f6f8fa;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-family: 'Courier New', monospace;
+    font-size: 0.9em;
+    color: #24292e;
+  }
+
+  /* Dark mode styles */
+  [data-bs-theme="dark"] .hljs {
+    background-color: #0d1117 !important;
+    border: 1px solid #30363d;
+    color: #c9d1d9 !important;
+  }
+  [data-bs-theme="dark"] pre {
+    background-color: #0d1117 !important;
+    border: 1px solid #30363d;
+    color: #c9d1d9;
+  }
+  [data-bs-theme="dark"] pre code {
+    color: #c9d1d9;
+  }
+  [data-bs-theme="dark"] code {
+    background-color: #161b22 !important;
+    color: #c9d1d9 !important;
+  }
+
+  /* Review summary dark mode fixes */
+  [data-bs-theme="dark"] .review-summary {
+    background-color: #0d2818 !important;
+    border-color: #238636 !important;
+  }
+  [data-bs-theme="dark"] .review-summary,
+  [data-bs-theme="dark"] .review-summary * {
+    color: #c9d1d9 !important;
+  }
+  [data-bs-theme="dark"] .review-summary .text-muted {
+    color: #8b949e !important;
+  }
+  [data-bs-theme="dark"] .review-summary h6,
+  [data-bs-theme="dark"] .review-summary strong {
+    color: #c9d1d9 !important;
+  }
+  [data-bs-theme="dark"] .review-summary .progress {
+    background-color: #0f172a !important;
+  }
+
+  /* Dark mode text color fixes */
+  [data-bs-theme="dark"] .text-muted {
+    color: #8b949e !important;
+  }
+  [data-bs-theme="dark"] .small {
+    color: #c9d1d9 !important;
+  }
+</style>
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/highlight.js/dist/highlight.min.js"></script>
 <script>
 (function () {
   "use strict";
@@ -84,7 +161,33 @@
   // -------------------------------------------------------------------------
 
   function renderMarkdown(text) {
-    if (window.marked) return marked.parse(text || "", { breaks: true, gfm: true });
+    if (window.marked && window.hljs) {
+      // Set marked options with syntax highlighting
+      marked.setOptions({
+        breaks: true,
+        gfm: true,
+        highlight: function(code, lang) {
+          try {
+            if (lang) {
+              return window.hljs.highlight(code, { language: lang, ignoreIllegals: true }).value;
+            }
+          } catch (e) {
+            // Fallback to auto highlighting
+          }
+          try {
+            return window.hljs.highlightAuto(code).value;
+          } catch (e) {
+            // Fallback to escaped code
+            return code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+          }
+        }
+      });
+      var html = marked.parse(text || "");
+      return html;
+    }
+    if (window.marked) {
+      return marked.parse(text || "", { breaks: true, gfm: true });
+    }
     var d = document.createElement("div");
     d.appendChild(document.createTextNode(text || ""));
     return "<span style='white-space:pre-wrap'>" + d.innerHTML + "</span>";
@@ -169,11 +272,11 @@
 
     var totalColor = scoreColor(review.total_score, review.max_score);
     var commentHtml = review.comment
-      ? '<p class="mt-2 mb-0 fst-italic small text-muted">"' + escapeHtml(review.comment) + '"</p>'
+      ? '<div class="mt-2 mb-0 small text-muted">' + renderMarkdown(review.comment) + '</div>'
       : "";
 
     return (
-      '<div class="review-summary mt-3 border-top pt-3 p-3 rounded" style="background:#f8fff9;">' +
+      '<div class="review-summary mt-3 border-top pt-3 p-3 rounded">' +
         '<div class="d-flex justify-content-between align-items-center mb-2">' +
           '<span class="small fw-semibold text-muted text-uppercase">Review</span>' +
           '<span class="fw-bold" style="color:' + totalColor + '">' +
@@ -328,8 +431,19 @@
         fetch("/api/v1/discussion/writeups/" + sid, {
           method: "DELETE",
           headers: { "Content-Type": "application/json", "CSRF-Token": CSRF_TOKEN },
+          body: JSON.stringify({}),
         })
-          .then(function (r) { return r.json(); })
+          .then(function (r) {
+            if (!r.ok) {
+              if (r.status === 401 || r.status === 403) {
+                alert("You don't have permission to delete this writeup.");
+              } else {
+                alert("Delete failed with status " + r.status);
+              }
+              throw new Error("HTTP " + r.status);
+            }
+            return r.json();
+          })
           .then(function (data) {
             if (!data.success) {
               alert(data.errors || "Delete failed");
@@ -339,8 +453,10 @@
             if (card) card.remove();
             loadWriteups();
           })
-          .catch(function () {
-            alert("Network error. Please try again.");
+          .catch(function (err) {
+            if (!err.message.startsWith("HTTP")) {
+              alert("Network error. Please try again.");
+            }
           });
       });
     });

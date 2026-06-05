@@ -53,3 +53,196 @@ select {
   background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 4 5'%3e%3cpath fill='%23343a40' d='M2 0L0 2h4zm0 5L0 3h4z'/%3e%3c/svg%3e");
   background-size: 8px 10px;
 }
+
+/* Syntax highlighting and markdown styles */
+.hljs,
+.markdown-body pre {
+  background-color: #f6f8fa !important;
+  border: 1px solid #e1e4e8;
+  color: #24292e !important;
+}
+
+.markdown-body code,
+code.hljs {
+  background-color: #f6f8fa !important;
+  color: #24292e !important;
+}
+
+/* Review feedback boxes light mode */
+.review-feedback-box,
+.review-summary {
+  background-color: #f8fff9 !important;
+  border-color: #c0e0d0 !important;
+  color: #1f2937 !important;
+
+  p, div, h6, span {
+    color: #1f2937 !important;
+  }
+
+  .text-muted {
+    color: #6b7280 !important;
+  }
+
+  .border-top {
+    border-color: #e5e7eb !important;
+  }
+
+  i {
+    color: #1f2937 !important;
+  }
+
+  .small {
+    color: #374151 !important;
+  }
+
+  strong {
+    color: #1f2937 !important;
+  }
+}
+
+#review-result-box {
+  background-color: #f8fff9 !important;
+  border-color: #c0e0d0 !important;
+  color: #1f2937 !important;
+
+  h6, strong, p, div, span {
+    color: #1f2937 !important;
+  }
+
+  .text-muted {
+    color: #6b7280 !important;
+  }
+
+  .border-top {
+    border-color: #e5e7eb !important;
+  }
+
+  i {
+    color: #1f2937 !important;
+  }
+
+  .small {
+    color: #374151 !important;
+  }
+}
+
+
+/* Dark mode overrides */
+[data-bs-theme="dark"] {
+  .hljs,
+  .markdown-body pre {
+    background-color: #0d1117 !important;
+    border: 1px solid #30363d;
+    color: #c9d1d9 !important;
+  }
+
+  .markdown-body code,
+  code.hljs {
+    background-color: #161b22 !important;
+    color: #c9d1d9 !important;
+  }
+
+  /* Highlight.js dark theme adjustments */
+  .hljs-string { color: #a5d6ff !important; }
+  .hljs-number { color: #79c0ff !important; }
+  .hljs-literal { color: #79c0ff !important; }
+  .hljs-attr { color: #79c0ff !important; }
+  .hljs-variable { color: #c9d1d9 !important; }
+  .hljs-template-variable { color: #a5d6ff !important; }
+  .hljs-strong { color: #c9d1d9 !important; font-weight: bold; }
+  .hljs-emphasis { color: #c9d1d9 !important; font-style: italic; }
+  .hljs-quote { color: #8b949e !important; }
+  .hljs-keyword { color: #ff7b72 !important; }
+  .hljs-selector-tag { color: #ff7b72 !important; }
+  .hljs-literal { color: #79c0ff !important; }
+  .hljs-title { color: #79c0ff !important; }
+  .hljs-section { color: #79c0ff !important; }
+  .hljs-link { color: #a5d6ff !important; }
+  .hljs-built-in { color: #79c0ff !important; }
+  .hljs-bullet { color: #79c0ff !important; }
+  .hljs-code { color: #a5d6ff !important; }
+  .hljs-addition { color: #aecbff !important; background-color: #033a16 !important; }
+  .hljs-deletion { color: #ffdcd7 !important; background-color: #67060c !important; }
+  .hljs-selector-class { color: #79c0ff !important; }
+  .hljs-selector-id { color: #79c0ff !important; }
+  .hljs-type { color: #ff7b72 !important; }
+  .hljs-class { color: #79c0ff !important; }
+  .hljs-attr { color: #79c0ff !important; }
+  .hljs-function { color: #d2a8ff !important; }
+  .hljs-variable { color: #ffa657 !important; }
+  .hljs-template-tag { color: #ffa657 !important; }
+  .hljs-name { color: #ff7b72 !important; }
+  .hljs-comment { color: #8b949e !important; }
+  .hljs-meta { color: #8b949e !important; }
+  .hljs-meta-string { color: #a5d6ff !important; }
+
+  /* Alert styling for dark mode */
+  .alert {
+    --bs-alert-bg: transparent;
+    --bs-alert-border: transparent;
+    --bs-alert-color: #c9d1d9;
+  }
+  .alert-success {
+    --bs-alert-bg: #0d2818;
+    --bs-alert-border: #238636;
+    --bs-alert-color: #c9d1d9;
+  }
+
+  /* Review feedback boxes dark mode */
+  .review-feedback-box,
+  .review-summary {
+    background-color: #0d2818 !important;
+    border-color: #238636 !important;
+    color: #c9d1d9 !important;
+
+    p, div, h6, span {
+      color: #c9d1d9 !important;
+    }
+
+    .text-muted {
+      color: #8b949e !important;
+    }
+
+    .border-top {
+      border-color: #30363d !important;
+    }
+
+    i {
+      color: #79c0ff !important;
+    }
+
+    .small {
+      color: #c9d1d9 !important;
+    }
+
+    strong {
+      color: #c9d1d9 !important;
+    }
+  }
+
+  #review-result-box {
+    background-color: #0d2818 !important;
+    border-color: #238636 !important;
+    color: #c9d1d9 !important;
+
+    h6, strong, p, div, span {
+      color: #c9d1d9 !important;
+    }
+
+    .text-muted {
+      color: #8b949e !important;
+    }
+
+    .border-top {
+      border-color: #30363d !important;
+    }
+
+    i {
+      color: #79c0ff !important;
+    }
+
+    .small {
+      color: #c9d1d9 !important;
+    }
+  }
+}

@@ -14,6 +14,30 @@
   // -------------------------------------------------------------------------
 
   function renderMarkdown(text) {
+    if (window.marked && window.hljs) {
+      // Set marked options with syntax highlighting
+      marked.setOptions({
+        breaks: true,
+        gfm: true,
+        highlight: function(code, lang) {
+          try {
+            if (lang) {
+              return window.hljs.highlight(code, { language: lang, ignoreIllegals: true }).value;
+            }
+          } catch (e) {
+            // Fallback to auto highlighting
+          }
+          try {
+            return window.hljs.highlightAuto(code).value;
+          } catch (e) {
+            // Fallback to escaped code
+            return code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+          }
+        }
+      });
+      var html = marked.parse(text || "");
+      return html;
+    }
     if (window.marked) {
       return marked.parse(text || "", { breaks: true, gfm: true });
     }
@@ -81,12 +105,12 @@
     var commentHtml = review.comment
       ? '<div class="mt-3 pt-2 border-top">' +
           '<p class="mb-1 small text-muted fw-semibold text-uppercase">Teacher Comment</p>' +
-          '<p class="mb-0 fst-italic">' + escapeHtml(review.comment) + "</p>" +
+          '<div class="mb-0 small">' + renderMarkdown(review.comment) + "</div>" +
         "</div>"
       : "";
 
     return (
-      '<div class="mt-3 p-3 rounded border" style="background:#f8fff9;">' +
+      '<div class="mt-3 p-3 rounded border review-feedback-box">' +
         '<p class="mb-2 small text-muted fw-semibold text-uppercase">' +
           '<i class="fas fa-star text-warning"></i> Teacher Feedback' +
         "</p>" +
@@ -110,9 +134,20 @@
     if (!confirm("Delete this writeup and its review permanently?")) return;
     fetch("/api/v1/discussion/writeups/" + submissionId, {
       method: "DELETE",
-      headers: { "CSRF-Token": CSRF_TOKEN },
+      headers: { "Content-Type": "application/json", "CSRF-Token": CSRF_TOKEN },
+      body: JSON.stringify({}),
     })
-      .then(function (r) { return r.json(); })
+      .then(function (r) {
+        if (!r.ok) {
+          if (r.status === 401 || r.status === 403) {
+            alert("You don't have permission to delete this writeup.");
+          } else {
+            alert("Delete failed with status " + r.status);
+          }
+          throw new Error("HTTP " + r.status);
+        }
+        return r.json();
+      })
       .then(function (data) {
         if (data.success) {
           cardEl.remove();
@@ -122,7 +157,11 @@
           alert(data.errors || "Delete failed");
         }
       })
-      .catch(function () { alert("Network error. Please try again."); });
+      .catch(function (err) {
+        if (!err.message.startsWith("HTTP")) {
+          alert("Network error. Please try again.");
+        }
+      });
   }
 
   // -------------------------------------------------------------------------
@@ -224,7 +263,7 @@
         // Comment
         if (sub.review.comment) {
           document.getElementById("review-comment-block").classList.remove("d-none");
-          document.getElementById("review-comment-text").textContent = sub.review.comment;
+          document.getElementById("review-comment-text").innerHTML = renderMarkdown(sub.review.comment);
         }
       }
     } else {

@@ -70,7 +70,7 @@
           </div>
           <div id="review-comment-block" class="mt-3 d-none">
             <p class="mb-1 small text-muted fw-semibold text-uppercase">Comment</p>
-            <p id="review-comment-text" class="mb-0 fst-italic"></p>
+            <div id="review-comment-text" class="mb-0 small"></div>
           </div>
         </div>
       </div>
@@ -101,7 +101,78 @@
 {% endblock %}
 
 {% block scripts %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js/styles/atom-one-dark.min.css">
+<style>
+  /* Light mode styles */
+  .hljs {
+    padding: 12px !important;
+    border-radius: 4px;
+    margin: 10px 0;
+    overflow-x: auto;
+  }
+  pre {
+    background-color: #f6f8fa;
+    padding: 12px;
+    border-radius: 4px;
+    margin: 10px 0;
+    border: 1px solid #e1e4e8;
+    color: #24292e;
+  }
+  pre code {
+    color: #24292e;
+  }
+  code {
+    background-color: #f6f8fa;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-family: 'Courier New', monospace;
+    font-size: 0.9em;
+    color: #24292e;
+  }
+
+  /* Dark mode styles */
+  [data-bs-theme="dark"] .hljs {
+    background-color: #0d1117 !important;
+    border: 1px solid #30363d;
+    color: #c9d1d9 !important;
+  }
+  [data-bs-theme="dark"] pre {
+    background-color: #0d1117 !important;
+    border: 1px solid #30363d;
+    color: #c9d1d9;
+  }
+  [data-bs-theme="dark"] pre code {
+    color: #c9d1d9;
+  }
+  [data-bs-theme="dark"] code {
+    background-color: #161b22 !important;
+    color: #c9d1d9 !important;
+  }
+
+  /* Grading rubric dark mode fixes */
+  [data-bs-theme="dark"] .bg-light {
+    background-color: #161b22 !important;
+  }
+  [data-bs-theme="dark"] .bg-light,
+  [data-bs-theme="dark"] .bg-light * {
+    color: #c9d1d9 !important;
+  }
+  [data-bs-theme="dark"] .bg-light .text-muted {
+    color: #8b949e !important;
+  }
+  [data-bs-theme="dark"] #writeup-content-rendered {
+    background-color: #161b22 !important;
+    color: #c9d1d9 !important;
+  }
+  [data-bs-theme="dark"] #writeup-content-rendered p,
+  [data-bs-theme="dark"] #writeup-content-rendered div {
+    color: #c9d1d9 !important;
+  }
+
+  /* Teacher feedback dark mode fixes - handled in main.scss */
+</style>
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/highlight.js/dist/highlight.min.js"></script>
 <script>
   var CHALLENGE_ID    = {{ challenge.id }};
   var CURRENT_USER_ID = {{ user.id }};
