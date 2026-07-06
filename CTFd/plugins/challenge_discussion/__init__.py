@@ -15,13 +15,18 @@ import csv
 import datetime
 import io
 
-from flask import Blueprint, jsonify, render_template, request, Response
+from flask import Blueprint, jsonify, render_template, request, Response, abort
 
 from CTFd.models import Challenges, Solves, Users, db
 from CTFd.plugins import register_plugin_assets_directory, register_plugin_script
 from CTFd.plugins.migrations import upgrade
-from CTFd.utils.decorators import admins_only, authed_only
+from CTFd.utils.decorators import admins_only, authed_only, ratelimit
+from CTFd.utils.modules import can_access_challenge
 from CTFd.utils.user import get_current_user
+
+
+MAX_CONTENT_LENGTH = 10000
+MAX_REPLY_DEPTH = 6
 
 
 # ---------------------------------------------------------------------------
@@ -221,19 +226,71 @@ def user_has_solved(user_id, challenge_id):
     )
 
 
-def _serialize_post(p):
+def _validate_text(value, field_name, max_length=MAX_CONTENT_LENGTH, required=True):
+    value = (value or "").strip()
+    if required and not value:
+        return None, f"{field_name} required"
+    if len(value) > max_length:
+        return None, f"{field_name} must be {max_length} characters or fewer"
+    return value or None, None
+
+
+def _get_accessible_challenge(challenge_id, user):
+    challenge = Challenges.query.filter_by(id=challenge_id, state="visible").first()
+    if not challenge:
+        return None
+    if user.type != "admin" and not can_access_challenge(challenge, user):
+        return None
+    return challenge
+
+
+def _get_accessible_challenge_or_404(challenge_id, user):
+    challenge = _get_accessible_challenge(challenge_id, user)
+    if not challenge:
+        abort(404)
+    return challenge
+
+
+def _post_depth(post):
+    depth = 0
+    current = post
+    while current.parent is not None:
+        depth += 1
+        if depth > MAX_REPLY_DEPTH:
+            break
+        current = current.parent
+    return depth
+
+
+def _csv_safe(value):
+    value = "" if value is None else str(value)
+    stripped = value.lstrip()
+    if value[:1] in ("=", "+", "-", "@", "\t", "\r", "\n") or stripped[:1] in (
+        "=",
+        "+",
+        "-",
+        "@",
+    ):
+        return "'" + value
+    return value
+
+
+def _serialize_post(p, depth=0):
+    replies = []
+    if depth < MAX_REPLY_DEPTH:
+        replies = [
+            _serialize_post(r, depth + 1)
+            for r in p.replies.filter_by(hidden=False).order_by(
+                DiscussionPost.date.asc()
+            )
+        ]
     return {
         "id": p.id,
         "user_id": p.user_id,
         "username": p.user.name if p.user else "deleted",
         "content": p.content,
         "date": p.date.isoformat(),
-        "replies": [
-            _serialize_post(r)
-            for r in p.replies.filter_by(hidden=False).order_by(
-                DiscussionPost.date.asc()
-            )
-        ],
+        "replies": replies,
     }
 
 
@@ -258,16 +315,16 @@ discussion_bp = Blueprint(
 @discussion_bp.route("/challenges/<int:challenge_id>/discuss/general")
 @authed_only
 def discuss_general(challenge_id):
-    challenge = Challenges.query.filter_by(id=challenge_id, state="visible").first_or_404()
     user = get_current_user()
+    challenge = _get_accessible_challenge_or_404(challenge_id, user)
     return render_template("discuss_general.html", challenge=challenge, user=user)
 
 
 @discussion_bp.route("/challenges/<int:challenge_id>/discuss/spoiler")
 @authed_only
 def discuss_spoiler(challenge_id):
-    challenge = Challenges.query.filter_by(id=challenge_id, state="visible").first_or_404()
     user = get_current_user()
+    challenge = _get_accessible_challenge_or_404(challenge_id, user)
     solved = user_has_solved(user.id, challenge_id) or user.type == "admin"
     if not solved:
         return render_template("discuss_locked.html", challenge=challenge, user=user), 403
@@ -282,8 +339,8 @@ def discuss_spoiler(challenge_id):
 @discussion_bp.route("/challenges/<int:challenge_id>/discuss/writeup")
 @authed_only
 def discuss_writeup(challenge_id):
-    challenge = Challenges.query.filter_by(id=challenge_id, state="visible").first_or_404()
     user = get_current_user()
+    challenge = _get_accessible_challenge_or_404(challenge_id, user)
     solved = user_has_solved(user.id, challenge_id) or user.type == "admin"
     if not solved:
         return render_template("discuss_locked.html", challenge=challenge, user=user), 403
@@ -340,11 +397,11 @@ def list_posts():
     if not challenge_id or post_type not in ("general", "spoiler"):
         return jsonify({"success": False, "errors": "challenge_id and valid type required"}), 400
 
-    challenge = Challenges.query.filter_by(id=challenge_id, state="visible").first()
+    user = get_current_user()
+    challenge = _get_accessible_challenge(challenge_id, user)
     if not challenge:
         return jsonify({"success": False, "errors": "Challenge not found"}), 404
 
-    user = get_current_user()
     if (
         post_type == "spoiler"
         and not user_has_solved(user.id, challenge_id)
@@ -363,6 +420,7 @@ def list_posts():
 
 
 @discussion_bp.route("/api/v1/discussion/posts", methods=["POST"])
+@ratelimit(method="POST", limit=20, interval=60, key_prefix="discussion_post")
 @authed_only
 def create_post():
     data = request.get_json(silent=True) or request.form
@@ -372,27 +430,32 @@ def create_post():
     except (TypeError, ValueError):
         return jsonify({"success": False, "errors": "challenge_id required"}), 400
 
-    content = (data.get("content") or "").strip()
+    content, error = _validate_text(data.get("content"), "content")
     post_type = data.get("post_type") or "general"
     parent_id = data.get("parent_id") or None
 
-    if not content:
-        return jsonify({"success": False, "errors": "content required"}), 400
+    if error:
+        return jsonify({"success": False, "errors": error}), 400
     if post_type not in ("general", "spoiler"):
         return jsonify({"success": False, "errors": "invalid post_type"}), 400
 
-    challenge = Challenges.query.filter_by(id=challenge_id, state="visible").first()
+    user = get_current_user()
+    challenge = _get_accessible_challenge(challenge_id, user)
     if not challenge:
         return jsonify({"success": False, "errors": "Challenge not found"}), 404
 
-    user = get_current_user()
-
     if parent_id:
+        try:
+            parent_id = int(parent_id)
+        except (TypeError, ValueError):
+            return jsonify({"success": False, "errors": "parent_id must be an integer"}), 400
         parent = DiscussionPost.query.filter_by(
             id=parent_id, challenge_id=challenge_id, hidden=False
         ).first()
         if not parent:
             return jsonify({"success": False, "errors": "Parent post not found"}), 404
+        if _post_depth(parent) >= MAX_REPLY_DEPTH:
+            return jsonify({"success": False, "errors": "Maximum reply depth reached"}), 400
         post_type = parent.post_type  # inherit from parent
 
     if (
@@ -474,9 +537,15 @@ def create_criterion():
     )
     next_order = (last.display_order + 1) if last else 0
 
+    description, error = _validate_text(
+        data.get("description"), "description", required=False
+    )
+    if error:
+        return jsonify({"success": False, "errors": error}), 400
+
     criterion = WriteupRubricCriterion(
         name=name,
-        description=(data.get("description") or "").strip() or None,
+        description=description,
         max_score=max_score,
         display_order=next_order,
     )
@@ -496,7 +565,12 @@ def update_criterion(criterion_id):
             return jsonify({"success": False, "errors": "name cannot be empty"}), 400
         criterion.name = name
     if "description" in data:
-        criterion.description = (data["description"] or "").strip() or None
+        description, error = _validate_text(
+            data["description"], "description", required=False
+        )
+        if error:
+            return jsonify({"success": False, "errors": error}), 400
+        criterion.description = description
     if "max_score" in data:
         try:
             max_score = int(data["max_score"])
@@ -542,11 +616,11 @@ def list_writeups():
     if not challenge_id:
         return jsonify({"success": False, "errors": "challenge_id required"}), 400
 
-    challenge = Challenges.query.filter_by(id=challenge_id, state="visible").first()
+    user = get_current_user()
+    challenge = _get_accessible_challenge(challenge_id, user)
     if not challenge:
         return jsonify({"success": False, "errors": "Challenge not found"}), 404
 
-    user = get_current_user()
     is_admin = user.type == "admin"
 
     if not is_admin and not user_has_solved(user.id, challenge_id):
@@ -564,7 +638,11 @@ def list_writeups():
             # Admin always gets full review details
             result.append(sub.serialize(include_review=True))
         else:
-            # Students see content for all, full review for reviewed writeups
+            is_own_submission = sub.user_id == user.id
+            if not is_own_submission and sub.status != "reviewed":
+                continue
+
+            # Students see their own draft plus reviewed writeups from others.
             data = {
                 "id": sub.id,
                 "challenge_id": sub.challenge_id,
@@ -594,6 +672,9 @@ def get_my_writeup():
         return jsonify({"success": False, "errors": "challenge_id required"}), 400
 
     user = get_current_user()
+    challenge = _get_accessible_challenge(challenge_id, user)
+    if not challenge:
+        return jsonify({"success": False, "errors": "Challenge not found"}), 404
     if not user_has_solved(user.id, challenge_id) and user.type != "admin":
         return jsonify({"success": False, "errors": "You must solve this challenge first."}), 403
 
@@ -606,6 +687,7 @@ def get_my_writeup():
 
 
 @discussion_bp.route("/api/v1/discussion/writeups", methods=["POST"])
+@ratelimit(method="POST", limit=10, interval=60, key_prefix="discussion_writeup")
 @authed_only
 def save_writeup():
     """Create or update the current user's writeup. Blocked once reviewed."""
@@ -616,15 +698,15 @@ def save_writeup():
     except (TypeError, ValueError):
         return jsonify({"success": False, "errors": "challenge_id required"}), 400
 
-    content = (data.get("content") or "").strip()
-    if not content:
-        return jsonify({"success": False, "errors": "content required"}), 400
+    content, error = _validate_text(data.get("content"), "content")
+    if error:
+        return jsonify({"success": False, "errors": error}), 400
 
-    challenge = Challenges.query.filter_by(id=challenge_id, state="visible").first()
+    user = get_current_user()
+    challenge = _get_accessible_challenge(challenge_id, user)
     if not challenge:
         return jsonify({"success": False, "errors": "Challenge not found"}), 404
 
-    user = get_current_user()
     if not user_has_solved(user.id, challenge_id) and user.type != "admin":
         return jsonify({"success": False, "errors": "You must solve this challenge first."}), 403
 
@@ -669,6 +751,7 @@ def delete_writeup(submission_id):
 @discussion_bp.route(
     "/api/v1/discussion/writeups/<int:submission_id>/review", methods=["POST"]
 )
+@ratelimit(method="POST", limit=30, interval=60, key_prefix="discussion_review")
 @admins_only
 def submit_review(submission_id):
     """Create or update a review for a writeup submission."""
@@ -680,7 +763,6 @@ def submit_review(submission_id):
         return jsonify({"success": False, "errors": "scores must be a JSON object {criterion_id: score}"}), 400
 
     criteria = WriteupRubricCriterion.query.all()
-    criteria_map = {c.id: c for c in criteria}
 
     validated_scores = {}
     total = 0
@@ -696,7 +778,9 @@ def submit_review(submission_id):
         total += score
         max_total += c.max_score
 
-    comment = (data.get("comment") or "").strip()
+    comment, error = _validate_text(data.get("comment"), "comment", required=False)
+    if error:
+        return jsonify({"success": False, "errors": error}), 400
     user = get_current_user()
 
     review = WriteupReview.query.filter_by(submission_id=submission_id).first()
@@ -748,11 +832,8 @@ def export_grades():
     ).all()
 
     output = io.StringIO()
-    fieldnames = (
-        ["challenge", "username"]
-        + [c.name for c in criteria]
-        + ["total", "max", "comment"]
-    )
+    criterion_headers = [_csv_safe(c.name) for c in criteria]
+    fieldnames = ["challenge", "username"] + criterion_headers + ["total", "max", "comment"]
     writer = csv.DictWriter(output, fieldnames=fieldnames)
     writer.writeheader()
 
@@ -760,14 +841,14 @@ def export_grades():
         if not sub.review:
             continue
         row = {
-            "challenge": sub.challenge.name if sub.challenge else str(sub.challenge_id),
-            "username": sub.user.name if sub.user else "deleted",
+            "challenge": _csv_safe(sub.challenge.name if sub.challenge else str(sub.challenge_id)),
+            "username": _csv_safe(sub.user.name if sub.user else "deleted"),
             "total": sub.review.total_score,
             "max": sub.review.max_score,
-            "comment": sub.review.comment or "",
+            "comment": _csv_safe(sub.review.comment or ""),
         }
-        for c in criteria:
-            row[c.name] = sub.review.scores.get(str(c.id), 0)
+        for c, header in zip(criteria, criterion_headers):
+            row[header] = sub.review.scores.get(str(c.id), 0)
         writer.writerow(row)
 
     csv_bytes = output.getvalue().encode("utf-8")
@@ -785,8 +866,6 @@ def export_grades():
 
 def load(app):
     upgrade(plugin_name="challenge_discussion")
-    with app.app_context():
-        db.create_all()
     app.register_blueprint(discussion_bp)
     register_plugin_assets_directory(app, base_path="/plugins/challenge_discussion/assets/")
     register_plugin_script("/plugins/challenge_discussion/assets/js/discussion.js")

@@ -25,7 +25,7 @@ def upgrade(op=None):
         sa.Column("id", sa.Integer(), nullable=False),
         sa.Column("challenge_id", sa.Integer(), nullable=False),
         sa.Column("user_id", sa.Integer(), nullable=False),
-        sa.Column("post_type", sa.String(length=16), nullable=False, server_default="discussion"),
+        sa.Column("post_type", sa.String(length=16), nullable=False, server_default="general"),
         sa.Column("parent_id", sa.Integer(), nullable=True),
         sa.Column("content", sa.Text(), nullable=False),
         sa.Column("date", sa.DateTime(), nullable=True),

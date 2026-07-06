@@ -116,6 +116,81 @@
   "use strict";
   var CSRF_TOKEN = window.init ? window.init.csrfNonce : '';
 
+  function makeIcon(className) {
+    var icon = document.createElement("i");
+    icon.className = className;
+    return icon;
+  }
+
+  function appendCell(row, children, className) {
+    var cell = document.createElement("td");
+    if (className) cell.className = className;
+    children.forEach(function (child) { cell.appendChild(child); });
+    row.appendChild(cell);
+    return cell;
+  }
+
+  function createCriterionRow(c) {
+    var row = document.createElement("tr");
+    row.id = "criterion-row-" + c.id;
+
+    var nameSpan = document.createElement("span");
+    nameSpan.className = "criterion-name";
+    nameSpan.textContent = c.name;
+    var nameInput = document.createElement("input");
+    nameInput.type = "text";
+    nameInput.className = "form-control form-control-sm d-none criterion-name-input";
+    nameInput.value = c.name;
+    appendCell(row, [nameSpan, nameInput]);
+
+    var descSpan = document.createElement("span");
+    descSpan.className = "criterion-desc text-muted";
+    descSpan.textContent = c.description || "—";
+    var descInput = document.createElement("input");
+    descInput.type = "text";
+    descInput.className = "form-control form-control-sm d-none criterion-desc-input";
+    descInput.value = c.description || "";
+    descInput.placeholder = "Optional description for students";
+    appendCell(row, [descSpan, descInput]);
+
+    var maxSpan = document.createElement("span");
+    maxSpan.className = "criterion-max";
+    maxSpan.textContent = c.max_score;
+    var maxInput = document.createElement("input");
+    maxInput.type = "number";
+    maxInput.className = "form-control form-control-sm d-none criterion-max-input";
+    maxInput.value = c.max_score;
+    maxInput.min = "1";
+    appendCell(row, [maxSpan, maxInput]);
+
+    var editBtn = document.createElement("button");
+    editBtn.className = "btn btn-sm btn-outline-secondary edit-btn";
+    editBtn.dataset.id = c.id;
+    editBtn.appendChild(makeIcon("fas fa-pen"));
+    var saveBtn = document.createElement("button");
+    saveBtn.className = "btn btn-sm btn-outline-success save-btn d-none";
+    saveBtn.dataset.id = c.id;
+    saveBtn.appendChild(makeIcon("fas fa-check"));
+    var deleteBtn = document.createElement("button");
+    deleteBtn.className = "btn btn-sm btn-outline-danger delete-btn ms-1";
+    deleteBtn.dataset.id = c.id;
+    deleteBtn.appendChild(makeIcon("fas fa-trash"));
+    appendCell(row, [editBtn, saveBtn, deleteBtn], "text-end");
+
+    return row;
+  }
+
+  function showEmptyRow() {
+    var row = document.createElement("tr");
+    row.id = "empty-row";
+    var cell = document.createElement("td");
+    cell.colSpan = 4;
+    cell.className = "text-muted text-center py-3";
+    cell.textContent = "No criteria yet. Add one below.";
+    row.appendChild(cell);
+    document.querySelector("#criteria-table tbody").replaceChildren(row);
+  }
+
   // ---- Inline edit ----
   document.querySelectorAll(".edit-btn").forEach(function (btn) {
     btn.addEventListener("click", function () {
@@ -170,8 +245,7 @@
           if (data.success) {
             document.getElementById("criterion-row-" + id).remove();
             if (!document.querySelector("#criteria-table tbody tr")) {
-              document.querySelector("#criteria-table tbody").innerHTML =
-                '<tr id="empty-row"><td colspan="4" class="text-muted text-center py-3">No criteria yet. Add one below.</td></tr>';
+              showEmptyRow();
             }
           } else {
             alert(data.errors || "Delete failed");
@@ -202,23 +276,9 @@
         var tbody = document.querySelector("#criteria-table tbody");
         var empty = document.getElementById("empty-row");
         if (empty) empty.remove();
-        tbody.insertAdjacentHTML("beforeend",
-          '<tr id="criterion-row-' + c.id + '">' +
-            '<td><span class="criterion-name">' + c.name + '</span>' +
-              '<input type="text" class="form-control form-control-sm d-none criterion-name-input" value="' + c.name + '"></td>' +
-            '<td><span class="criterion-desc text-muted">' + (c.description || "—") + '</span>' +
-              '<input type="text" class="form-control form-control-sm d-none criterion-desc-input" value="' + (c.description || "") + '" placeholder="Optional description for students"></td>' +
-            '<td><span class="criterion-max">' + c.max_score + '</span>' +
-              '<input type="number" class="form-control form-control-sm d-none criterion-max-input" value="' + c.max_score + '" min="1"></td>' +
-            '<td class="text-end">' +
-              '<button class="btn btn-sm btn-outline-secondary edit-btn" data-id="' + c.id + '"><i class="fas fa-pen"></i></button>' +
-              '<button class="btn btn-sm btn-outline-success save-btn d-none" data-id="' + c.id + '"><i class="fas fa-check"></i></button>' +
-              '<button class="btn btn-sm btn-outline-danger delete-btn ms-1" data-id="' + c.id + '"><i class="fas fa-trash"></i></button>' +
-            '</td>' +
-          '</tr>'
-        );
+        var newRow = createCriterionRow(c);
+        tbody.appendChild(newRow);
         // Wire up new row buttons
-        var newRow = document.getElementById("criterion-row-" + c.id);
         newRow.querySelector(".edit-btn").addEventListener("click", function () {
           newRow.querySelectorAll(".criterion-name,.criterion-desc,.criterion-max").forEach(function (el) { el.classList.add("d-none"); });
           newRow.querySelectorAll(".criterion-name-input,.criterion-desc-input,.criterion-max-input").forEach(function (el) { el.classList.remove("d-none"); });

@@ -36,20 +36,33 @@
         }
       });
       var html = marked.parse(text || "");
-      return html;
+      return window.DOMPurify ? DOMPurify.sanitize(html) : escapeHtml(text || "");
     }
     if (window.marked) {
-      return marked.parse(text || "", { breaks: true, gfm: true });
+      var markedHtml = marked.parse(text || "", { breaks: true, gfm: true });
+      return window.DOMPurify ? DOMPurify.sanitize(markedHtml) : escapeHtml(text || "");
     }
-    var d = document.createElement("div");
-    d.appendChild(document.createTextNode(text || ""));
-    return "<span style='white-space:pre-wrap'>" + d.innerHTML + "</span>";
+    return '<span style="white-space:pre-wrap">' + escapeHtml(text || "") + "</span>";
   }
 
   function escapeHtml(text) {
-    var d = document.createElement("div");
-    d.appendChild(document.createTextNode(text || ""));
-    return d.innerHTML;
+    return String(text || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  function htmlFragment(html) {
+    if (window.DOMPurify) {
+      return DOMPurify.sanitize(html, { RETURN_DOM_FRAGMENT: true });
+    }
+    return document.createTextNode(String(html || "").replace(/<[^>]*>/g, ""));
+  }
+
+  function setSafeHtml(el, html) {
+    el.replaceChildren(htmlFragment(html));
   }
 
   function formatDate(iso) {
@@ -177,12 +190,11 @@
     document.getElementById("reviewed-count").textContent = reviewed.length;
 
     if (!reviewed.length) {
-      container.innerHTML =
-        '<p class="text-muted text-center py-4">No reviewed writeups yet.</p>';
+      setSafeHtml(container, '<p class="text-muted text-center py-4">No reviewed writeups yet.</p>');
       return;
     }
 
-    container.innerHTML = reviewed
+    setSafeHtml(container, reviewed
       .map(function (sub) {
         var deleteBtn = IS_ADMIN
           ? '<button class="btn btn-sm btn-outline-danger delete-writeup-btn ms-2"' +
@@ -208,7 +220,7 @@
           "</div>"
         );
       })
-      .join("");
+      .join(""));
 
     if (IS_ADMIN) {
       container.querySelectorAll(".delete-writeup-btn").forEach(function (btn) {
@@ -233,7 +245,7 @@
       // No writeup yet — show empty editor
       editor.classList.remove("d-none");
       reviewed.classList.add("d-none");
-      badge.innerHTML = '<span class="badge bg-secondary">Not submitted</span>';
+      setSafeHtml(badge, '<span class="badge bg-secondary">Not submitted</span>');
       return;
     }
 
@@ -241,18 +253,17 @@
       // Lock editor, show rendered content + review
       editor.classList.add("d-none");
       reviewed.classList.remove("d-none");
-      badge.innerHTML = '<span class="badge bg-success">Reviewed</span>';
+      setSafeHtml(badge, '<span class="badge bg-success">Reviewed</span>');
 
-      document.getElementById("writeup-content-rendered").innerHTML =
-        renderMarkdown(sub.content);
+      setSafeHtml(document.getElementById("writeup-content-rendered"), renderMarkdown(sub.content));
 
       if (sub.review) {
         // Populate per-criterion score bars
         var scoresContainer = document.getElementById("review-criteria-scores");
-        scoresContainer.innerHTML = "";
+        scoresContainer.replaceChildren();
         if (sub.review.scores && sub.review.scores.length) {
           sub.review.scores.forEach(function (s) {
-            scoresContainer.innerHTML += buildScoreBarHtml(s.name, s.score, s.max_score);
+            scoresContainer.appendChild(htmlFragment(buildScoreBarHtml(s.name, s.score, s.max_score)));
           });
         }
         // Total
@@ -263,14 +274,14 @@
         // Comment
         if (sub.review.comment) {
           document.getElementById("review-comment-block").classList.remove("d-none");
-          document.getElementById("review-comment-text").innerHTML = renderMarkdown(sub.review.comment);
+          setSafeHtml(document.getElementById("review-comment-text"), renderMarkdown(sub.review.comment));
         }
       }
     } else {
       // Draft — show editor pre-filled
       editor.classList.remove("d-none");
       reviewed.classList.add("d-none");
-      badge.innerHTML = '<span class="badge bg-warning text-dark">Draft</span>';
+      setSafeHtml(badge, '<span class="badge bg-warning text-dark">Draft</span>');
       document.getElementById("writeup-content").value = sub.content;
     }
   }
@@ -333,8 +344,10 @@
       .then(function (data) {
         if (data.success) renderAllWriteups(data.data);
         else
-          document.getElementById("all-writeups-list").innerHTML =
-            '<div class="alert alert-danger">' + escapeHtml(data.errors) + "</div>";
+          setSafeHtml(
+            document.getElementById("all-writeups-list"),
+            '<div class="alert alert-danger">' + escapeHtml(data.errors) + "</div>"
+          );
       });
   }
 

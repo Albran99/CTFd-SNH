@@ -34,7 +34,9 @@
             a.href = url;
             a.className = "btn btn-sm discussion-plugin-btn " + cls;
             a.style.marginLeft = "6px";
-            a.innerHTML = '<i class="fas ' + icon + '"></i> ' + label;
+            var iconEl = document.createElement("i");
+            iconEl.className = "fas " + icon;
+            a.append(iconEl, document.createTextNode(" " + label));
             return a;
         }
 

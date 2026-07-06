@@ -8,17 +8,33 @@ var INDENT_PX  = 24;     // pixels per indent level
 
 function renderMarkdown(text) {
   if (window.marked) {
-    return marked.parse(text || '', {breaks: true, gfm: true});
+    var html = marked.parse(text || '', {breaks: true, gfm: true});
+    return window.DOMPurify ? DOMPurify.sanitize(html) : escapeHtml(text || '');
   }
-  var d = document.createElement('div');
-  d.appendChild(document.createTextNode(text || ''));
-  return '<span style="white-space:pre-wrap">' + d.innerHTML + '</span>';
+  return escapeHtml(text || '');
 }
 
 function escapeHtml(text) {
   var d = document.createElement('div');
   d.appendChild(document.createTextNode(text || ''));
-  return d.innerHTML;
+  return d.textContent;
+}
+
+function appendMarkdown(el, text) {
+  if (window.marked && window.DOMPurify) {
+    var html = marked.parse(text || '', {breaks: true, gfm: true});
+    el.replaceChildren(DOMPurify.sanitize(html, {RETURN_DOM_FRAGMENT: true}));
+    return;
+  }
+  el.textContent = text || '';
+  el.style.whiteSpace = 'pre-wrap';
+}
+
+function makeEl(tag, className, text) {
+  var el = document.createElement(tag);
+  if (className) el.className = className;
+  if (text !== undefined) el.textContent = text;
+  return el;
 }
 
 function formatDate(iso) {
@@ -31,23 +47,25 @@ function showReplyContext(post) {
   replyParentId = post.id;
   var bar = document.getElementById('reply-context');
   var preview = (post.content || '').slice(0, 120) + (post.content && post.content.length > 120 ? '…' : '');
-  bar.innerHTML =
-    '<div class="d-flex justify-content-between align-items-start">' +
-      '<div>' +
-        '<span class="fw-semibold me-2">Replying to ' + escapeHtml(post.username) + ':</span>' +
-        '<span class="text-muted fst-italic">' + escapeHtml(preview) + '</span>' +
-      '</div>' +
-      '<button type="button" class="btn-close ms-3 flex-shrink-0" id="reply-cancel" aria-label="Cancel reply"></button>' +
-    '</div>';
+  var row = makeEl('div', 'd-flex justify-content-between align-items-start');
+  var textWrap = document.createElement('div');
+  textWrap.appendChild(makeEl('span', 'fw-semibold me-2', 'Replying to ' + post.username + ':'));
+  textWrap.appendChild(makeEl('span', 'text-muted fst-italic', preview));
+  var cancel = makeEl('button', 'btn-close ms-3 flex-shrink-0');
+  cancel.type = 'button';
+  cancel.id = 'reply-cancel';
+  cancel.setAttribute('aria-label', 'Cancel reply');
+  row.append(textWrap, cancel);
+  bar.replaceChildren(row);
   bar.classList.remove('d-none');
   document.getElementById('post-content').focus();
-  document.getElementById('reply-cancel').addEventListener('click', clearReplyContext);
+  cancel.addEventListener('click', clearReplyContext);
 }
 
 function clearReplyContext() {
   replyParentId = null;
   var bar = document.getElementById('reply-context');
-  bar.innerHTML = '';
+  bar.replaceChildren();
   bar.classList.add('d-none');
 }
 
@@ -55,44 +73,54 @@ function clearReplyContext() {
 // Returns an HTML string for a post and all its nested replies.
 // depth controls the left-border indentation (capped at MAX_INDENT).
 
-function buildPostHtml(post, depth) {
+function buildPostElement(post, depth) {
   postMap[post.id] = post;
 
   var indent = Math.min(depth, MAX_INDENT) * INDENT_PX;
   var borderColor = depth === 0 ? 'transparent' : 'hsl(' + ((depth * 47) % 360) + ',60%,55%)';
 
   var canDelete = post.user_id === CURRENT_USER_ID || IS_ADMIN;
-  var deleteBtn = canDelete
-    ? '<button class="btn btn-sm btn-outline-danger delete-btn ms-1" data-post-id="' + post.id + '"><i class="fas fa-trash"></i></button>'
-    : '';
-  var replyBtn = ALLOW_REPLIES
-    ? '<button class="btn btn-sm btn-outline-secondary reply-btn me-1" data-post-id="' + post.id + '"><i class="fas fa-reply"></i> Reply</button>'
-    : '';
 
-  var childrenHtml = '';
-  if (post.replies && post.replies.length) {
-    childrenHtml = post.replies.map(function(r) {
-      return buildPostHtml(r, depth + 1);
-    }).join('');
+  var wrapper = document.createElement('div');
+  wrapper.id = 'post-' + post.id;
+  if (depth > 0) {
+    wrapper.style.marginLeft = indent + 'px';
+    wrapper.style.borderLeft = '3px solid ' + borderColor;
+    wrapper.style.paddingLeft = '10px';
   }
 
-  var style = depth > 0
-    ? 'margin-left:' + indent + 'px; border-left: 3px solid ' + borderColor + '; padding-left: 10px;'
-    : '';
+  var card = makeEl('div', 'card mb-2');
+  var body = makeEl('div', 'card-body py-2');
+  var header = makeEl('div', 'd-flex justify-content-between mb-1');
+  header.append(makeEl('strong', '', post.username), makeEl('small', 'text-muted', formatDate(post.date)));
 
-  return '<div id="post-' + post.id + '" style="' + style + '">' +
-    '<div class="card mb-2">' +
-      '<div class="card-body py-2">' +
-        '<div class="d-flex justify-content-between mb-1">' +
-          '<strong>' + escapeHtml(post.username) + '</strong>' +
-          '<small class="text-muted">' + formatDate(post.date) + '</small>' +
-        '</div>' +
-        '<div class="markdown-body mt-1 mb-2">' + renderMarkdown(post.content) + '</div>' +
-        '<div>' + replyBtn + deleteBtn + '</div>' +
-      '</div>' +
-    '</div>' +
-    childrenHtml +
-  '</div>';
+  var content = makeEl('div', 'markdown-body mt-1 mb-2');
+  appendMarkdown(content, post.content);
+
+  var actions = document.createElement('div');
+  if (ALLOW_REPLIES) {
+    var replyBtn = makeEl('button', 'btn btn-sm btn-outline-secondary reply-btn me-1');
+    replyBtn.dataset.postId = post.id;
+    replyBtn.append(makeEl('i', 'fas fa-reply'), document.createTextNode(' Reply'));
+    actions.appendChild(replyBtn);
+  }
+  if (canDelete) {
+    var deleteBtn = makeEl('button', 'btn btn-sm btn-outline-danger delete-btn ms-1');
+    deleteBtn.dataset.postId = post.id;
+    deleteBtn.appendChild(makeEl('i', 'fas fa-trash'));
+    actions.appendChild(deleteBtn);
+  }
+
+  body.append(header, content, actions);
+  card.appendChild(body);
+  wrapper.appendChild(card);
+
+  if (post.replies && post.replies.length) {
+    post.replies.forEach(function(r) {
+      wrapper.appendChild(buildPostElement(r, depth + 1));
+    });
+  }
+  return wrapper;
 }
 
 // -- Render all top-level posts --
@@ -100,13 +128,13 @@ function buildPostHtml(post, depth) {
 function renderPosts(posts) {
   var container = document.getElementById('discussion-posts');
   if (!posts.length) {
-    container.innerHTML = '<p class="text-muted text-center py-3">No posts yet. Be the first!</p>';
+    container.replaceChildren(makeEl('p', 'text-muted text-center py-3', 'No posts yet. Be the first!'));
     return;
   }
   postMap = {};
-  container.innerHTML = posts.map(function(p) {
-    return buildPostHtml(p, 0);
-  }).join('');
+  container.replaceChildren.apply(container, posts.map(function(p) {
+    return buildPostElement(p, 0);
+  }));
 
   // Bind reply buttons (all depths)
   if (ALLOW_REPLIES) {
@@ -146,8 +174,9 @@ function loadPosts() {
       if (data.success) {
         renderPosts(data.data);
       } else {
-        document.getElementById('discussion-posts').innerHTML =
-          '<div class="alert alert-danger">' + escapeHtml(data.errors) + '</div>';
+        document.getElementById('discussion-posts').replaceChildren(
+          makeEl('div', 'alert alert-danger', data.errors)
+        );
       }
     });
 }

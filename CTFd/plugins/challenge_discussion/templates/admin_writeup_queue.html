@@ -148,6 +148,7 @@
   }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="/plugins/challenge_discussion/assets/vendor/purify.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/highlight.js/dist/highlight.min.js"></script>
 <script>
 (function () {
@@ -183,20 +184,37 @@
         }
       });
       var html = marked.parse(text || "");
-      return html;
+      return window.DOMPurify ? DOMPurify.sanitize(html) : escapeHtml(text || "");
     }
     if (window.marked) {
-      return marked.parse(text || "", { breaks: true, gfm: true });
+      var markedHtml = marked.parse(text || "", { breaks: true, gfm: true });
+      return window.DOMPurify ? DOMPurify.sanitize(markedHtml) : escapeHtml(text || "");
     }
-    var d = document.createElement("div");
-    d.appendChild(document.createTextNode(text || ""));
-    return "<span style='white-space:pre-wrap'>" + d.innerHTML + "</span>";
+    return '<span style="white-space:pre-wrap">' + escapeHtml(text || "") + "</span>";
   }
 
   function escapeHtml(text) {
-    var d = document.createElement("div");
-    d.appendChild(document.createTextNode(text || ""));
-    return d.innerHTML;
+    return String(text || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  function htmlFragment(html) {
+    if (window.DOMPurify) {
+      return DOMPurify.sanitize(html, { RETURN_DOM_FRAGMENT: true });
+    }
+    return document.createTextNode(String(html || "").replace(/<[^>]*>/g, ""));
+  }
+
+  function setSafeHtml(el, html) {
+    el.replaceChildren(htmlFragment(html));
+  }
+
+  function replaceWithSafeHtml(el, html) {
+    el.replaceWith(htmlFragment(html));
   }
 
   function formatDate(iso) { return new Date(iso).toLocaleString(); }
@@ -350,7 +368,7 @@
     if (challengeFilter) url += "?challenge_id=" + challengeFilter;
 
     var container = document.getElementById("writeups-list");
-    container.innerHTML = '<div class="text-center py-5"><i class="fas fa-circle-notch fa-spin fa-2x"></i></div>';
+    setSafeHtml(container, '<div class="text-center py-5"><i class="fas fa-circle-notch fa-spin fa-2x"></i></div>');
 
     // If no challenge selected, we need to load from all challenges
     var challenges = [];
@@ -390,11 +408,11 @@
       document.getElementById("stat-reviewed").textContent = reviewed;
 
       if (!all.length) {
-        container.innerHTML = '<p class="text-muted text-center py-5">No writeups found.</p>';
+        setSafeHtml(container, '<p class="text-muted text-center py-5">No writeups found.</p>');
         return;
       }
 
-      container.innerHTML = all.map(buildWriteupCardHtml).join("");
+      setSafeHtml(container, all.map(buildWriteupCardHtml).join(""));
       bindCardEvents();
     });
   }
@@ -409,9 +427,9 @@
       btn.addEventListener("click", function () {
         var body = document.getElementById("submission-body-" + btn.dataset.id);
         var hidden = body.classList.toggle("d-none");
-        btn.innerHTML = hidden
+        setSafeHtml(btn, hidden
           ? '<i class="fas fa-chevron-down"></i> Show writeup'
-          : '<i class="fas fa-chevron-up"></i> Hide writeup';
+          : '<i class="fas fa-chevron-up"></i> Hide writeup');
       });
     });
 
@@ -468,7 +486,7 @@
         var card = document.getElementById("submission-card-" + sid);
         var summary = card.querySelector(".review-summary");
         if (!summary) return;
-        summary.outerHTML = buildReviewFormHtml(sid);
+        replaceWithSafeHtml(summary, buildReviewFormHtml(sid));
         // Wire up the new submit button
         var newBtn = card.querySelector(".submit-review-btn");
         if (newBtn) newBtn.addEventListener("click", function () { submitReview(newBtn); });
@@ -505,11 +523,11 @@
         // Replace the review form with the summary in place
         var reviewArea = card.querySelector(".review-form");
         if (reviewArea) {
-          reviewArea.outerHTML = buildReviewSummaryHtml(data.data);
+          replaceWithSafeHtml(reviewArea, buildReviewSummaryHtml(data.data));
           card.querySelector(".edit-review-btn").addEventListener("click", function () {
             var summary = card.querySelector(".review-summary");
             if (summary) {
-              summary.outerHTML = buildReviewFormHtml(sid);
+              replaceWithSafeHtml(summary, buildReviewFormHtml(sid));
               var nb = card.querySelector(".submit-review-btn");
               if (nb) nb.addEventListener("click", function () { submitReview(nb); });
             }
