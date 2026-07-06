@@ -420,8 +420,8 @@ def list_posts():
 
 
 @discussion_bp.route("/api/v1/discussion/posts", methods=["POST"])
-@ratelimit(method="POST", limit=20, interval=60, key_prefix="discussion_post")
 @authed_only
+@ratelimit(method="POST", limit=20, interval=60, key_prefix="discussion_post")
 def create_post():
     data = request.get_json(silent=True) or request.form
 
@@ -687,8 +687,8 @@ def get_my_writeup():
 
 
 @discussion_bp.route("/api/v1/discussion/writeups", methods=["POST"])
-@ratelimit(method="POST", limit=10, interval=60, key_prefix="discussion_writeup")
 @authed_only
+@ratelimit(method="POST", limit=10, interval=60, key_prefix="discussion_writeup")
 def save_writeup():
     """Create or update the current user's writeup. Blocked once reviewed."""
     data = request.get_json(silent=True) or request.form
@@ -751,8 +751,8 @@ def delete_writeup(submission_id):
 @discussion_bp.route(
     "/api/v1/discussion/writeups/<int:submission_id>/review", methods=["POST"]
 )
-@ratelimit(method="POST", limit=30, interval=60, key_prefix="discussion_review")
 @admins_only
+@ratelimit(method="POST", limit=30, interval=60, key_prefix="discussion_review")
 def submit_review(submission_id):
     """Create or update a review for a writeup submission."""
     sub = WriteupSubmission.query.get_or_404(submission_id)
