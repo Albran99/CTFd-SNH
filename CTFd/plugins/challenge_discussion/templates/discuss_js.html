@@ -152,7 +152,7 @@ function renderPosts(posts) {
   container.querySelectorAll('.delete-btn').forEach(function(btn) {
     btn.addEventListener('click', function() {
       if (!confirm('Delete this post?')) return;
-      fetch('/api/v1/discussion/posts/' + btn.dataset.postId, {
+      fetch(DISCUSSION_API_ROOT + '/posts/' + btn.dataset.postId, {
         method: 'DELETE',
         headers: {'Content-Type': 'application/json', 'CSRF-Token': CSRF_TOKEN},
       }).then(function(r) { return r.json(); }).then(function(data) {
@@ -168,7 +168,7 @@ function renderPosts(posts) {
 }
 
 function loadPosts() {
-  fetch('/api/v1/discussion/posts?challenge_id=' + CHALLENGE_ID + '&type=' + POST_TYPE)
+  fetch(DISCUSSION_API_ROOT + '/posts?challenge_id=' + CHALLENGE_ID + '&type=' + POST_TYPE)
     .then(function(r) { return r.json(); })
     .then(function(data) {
       if (data.success) {
@@ -187,7 +187,7 @@ document.getElementById('post-form').addEventListener('submit', function(e) {
   if (!content) return;
   var body = {challenge_id: CHALLENGE_ID, post_type: POST_TYPE, content: content};
   if (replyParentId) body.parent_id = replyParentId;
-  fetch('/api/v1/discussion/posts', {
+  fetch(DISCUSSION_API_ROOT + '/posts', {
     method: 'POST',
     headers: {'Content-Type': 'application/json', 'CSRF-Token': CSRF_TOKEN},
     body: JSON.stringify(body),

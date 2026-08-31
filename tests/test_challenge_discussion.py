@@ -65,3 +65,33 @@ def test_reviewed_writeup_can_be_resubmitted_with_feedback_history():
         assert WriteupSubmission.query.get(submission.id).content == "Revised explanation with the final step."
 
     destroy_ctfd(app)
+
+
+def test_plugin_urls_include_application_root():
+    app = create_ctfd(enable_plugins=True, application_root="/ctf")
+    with app.app_context():
+        user = gen_user(app.db, name="writer")
+        challenge = gen_challenge(app.db)
+        gen_solve(app.db, user_id=user.id, challenge_id=challenge.id)
+
+        client = login_as_user(app, name="writer")
+        response = client.get(
+            f"/challenges/{challenge.id}/discuss/general"
+        )
+
+        assert response.status_code == 200
+        html = response.get_data(as_text=True)
+        assert 'href="../../../challenges"' in html
+        assert (
+            'src="../../../plugins/challenge_discussion/assets/vendor/purify.min.js"'
+            in html
+        )
+        assert 'var DISCUSSION_API_ROOT = "../../../api/v1/discussion";' in html
+
+        response = client.get(
+            f"/challenges/{challenge.id}/discuss/writeup"
+        )
+        assert response.status_code == 200
+        html = response.get_data(as_text=True)
+        assert (
+            'src="../../../plugins/challenge_discussion/assets/js/writeup.js"'

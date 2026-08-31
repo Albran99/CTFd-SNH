@@ -102,7 +102,7 @@
     <div class="text-center py-4"><i class="fas fa-circle-notch fa-spin fa-2x"></i></div>
   </div>
 
-  <a href="/challenges" class="btn btn-outline-secondary mt-2 mb-4">
+  <a href="../../../challenges" class="btn btn-outline-secondary mt-2 mb-4">
     <i class="fas fa-arrow-left"></i> Back to Challenges
   </a>
 
@@ -181,13 +181,14 @@
   /* Teacher feedback dark mode fixes - handled in main.scss */
 </style>
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-<script src="/plugins/challenge_discussion/assets/vendor/purify.min.js"></script>
+<script src="../../../plugins/challenge_discussion/assets/vendor/purify.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/highlight.js/dist/highlight.min.js"></script>
 <script>
   var CHALLENGE_ID    = {{ challenge.id }};
   var CURRENT_USER_ID = {{ user.id }};
   var IS_ADMIN        = {{ 'true' if user.type == 'admin' else 'false' }};
   var CSRF_TOKEN      = window.init ? window.init.csrfNonce : '';
+  var DISCUSSION_API_ROOT = "../../../api/v1/discussion";
 </script>
-<script src="/plugins/challenge_discussion/assets/js/writeup.js"></script>
+<script src="../../../plugins/challenge_discussion/assets/js/writeup.js"></script>
 {% endblock %}

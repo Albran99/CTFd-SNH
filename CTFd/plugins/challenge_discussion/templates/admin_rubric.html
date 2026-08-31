@@ -15,7 +15,7 @@
       Define the criteria used to grade student writeups.
       Changes take effect immediately but do <strong>not</strong> retroactively alter already-reviewed scores.
     </p>
-    <a href="/admin/discussion/writeups" class="btn btn-outline-primary btn-sm">
+    <a href="writeups" class="btn btn-outline-primary btn-sm">
       <i class="fas fa-list"></i> Writeup Queue
     </a>
   </div>
@@ -103,7 +103,7 @@
     </div>
   </div>
 
-  <a href="/admin/discussion/writeups" class="btn btn-outline-secondary mb-4">
+  <a href="writeups" class="btn btn-outline-secondary mb-4">
     <i class="fas fa-arrow-left"></i> Back to Writeup Queue
   </a>
 
@@ -115,6 +115,7 @@
 (function () {
   "use strict";
   var CSRF_TOKEN = window.init ? window.init.csrfNonce : '';
+  var DISCUSSION_API_ROOT = "../../api/v1/discussion";
 
   function makeIcon(className) {
     var icon = document.createElement("i");
@@ -212,7 +213,7 @@
       var max  = parseInt(row.querySelector(".criterion-max-input").value);
       if (!name || isNaN(max) || max < 1) { alert("Name and a positive max score are required."); return; }
 
-      fetch("/api/v1/discussion/rubric/" + id, {
+      fetch(DISCUSSION_API_ROOT + "/rubric/" + id, {
         method: "PATCH",
         headers: { "Content-Type": "application/json", "CSRF-Token": CSRF_TOKEN },
         body: JSON.stringify({ name: name, description: desc, max_score: max }),
@@ -236,7 +237,7 @@
     btn.addEventListener("click", function () {
       if (!confirm("Delete this criterion? This will not change already-reviewed scores.")) return;
       var id = btn.dataset.id;
-      fetch("/api/v1/discussion/rubric/" + id, {
+      fetch(DISCUSSION_API_ROOT + "/rubric/" + id, {
         method: "DELETE",
         headers: { "CSRF-Token": CSRF_TOKEN },
       })
@@ -264,7 +265,7 @@
     var max  = parseInt(document.getElementById("new-max").value);
     if (!name || isNaN(max) || max < 1) { errBox.textContent = "Name and a positive max score are required."; errBox.classList.remove("d-none"); return; }
 
-    fetch("/api/v1/discussion/rubric", {
+    fetch(DISCUSSION_API_ROOT + "/rubric", {
       method: "POST",
       headers: { "Content-Type": "application/json", "CSRF-Token": CSRF_TOKEN },
       body: JSON.stringify({ name: name, description: desc, max_score: max }),
@@ -290,7 +291,7 @@
           var ds = newRow.querySelector(".criterion-desc-input").value.trim();
           var mx = parseInt(newRow.querySelector(".criterion-max-input").value);
           if (!nm || isNaN(mx) || mx < 1) { alert("Name and a positive max score are required."); return; }
-          fetch("/api/v1/discussion/rubric/" + c.id, {
+          fetch(DISCUSSION_API_ROOT + "/rubric/" + c.id, {
             method: "PATCH",
             headers: { "Content-Type": "application/json", "CSRF-Token": CSRF_TOKEN },
             body: JSON.stringify({ name: nm, description: ds, max_score: mx }),
@@ -307,7 +308,7 @@
         });
         newRow.querySelector(".delete-btn").addEventListener("click", function () {
           if (!confirm("Delete this criterion?")) return;
-          fetch("/api/v1/discussion/rubric/" + c.id, { method: "DELETE", headers: { "CSRF-Token": CSRF_TOKEN } })
+          fetch(DISCUSSION_API_ROOT + "/rubric/" + c.id, { method: "DELETE", headers: { "CSRF-Token": CSRF_TOKEN } })
             .then(function (r) { return r.json(); }).then(function (d) {
               if (d.success) newRow.remove();
               else alert(d.errors || "Delete failed");

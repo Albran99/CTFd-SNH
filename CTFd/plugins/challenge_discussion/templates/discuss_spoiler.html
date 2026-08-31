@@ -26,14 +26,14 @@
       </form>
     </div>
   </div>
-  <a href="/challenges" class="btn btn-outline-secondary mb-4">
+  <a href="../../../challenges" class="btn btn-outline-secondary mb-4">
     <i class="fas fa-arrow-left"></i> Back to Challenges
   </a>
 </div>
 {% endblock %}
 
 {% block scripts %}
-<script src="/plugins/challenge_discussion/assets/vendor/purify.min.js"></script>
+<script src="../../../plugins/challenge_discussion/assets/vendor/purify.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <script>
 (function () {
@@ -43,6 +43,7 @@
   var IS_ADMIN = {{ 'true' if user.type == 'admin' else 'false' }};
   var CSRF_TOKEN = window.init ? window.init.csrfNonce : '';
   var ALLOW_REPLIES = true;
+  var DISCUSSION_API_ROOT = "../../../api/v1/discussion";
 
   {% include "discuss_js.html" %}
 })();
