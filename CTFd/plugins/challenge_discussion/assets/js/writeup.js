@@ -236,6 +236,34 @@
   // Render own writeup section
   // -------------------------------------------------------------------------
 
+  var currentSubmission = null;
+
+  function renderRevisionHistory(revisions) {
+    var history = document.getElementById("writeup-revision-history");
+    var list = document.getElementById("writeup-revision-list");
+    if (!revisions || !revisions.length) {
+      history.classList.add("d-none");
+      list.replaceChildren();
+      return;
+    }
+
+    history.classList.remove("d-none");
+    setSafeHtml(list, revisions.map(function (revision, index) {
+      return (
+        '<div class="card mb-3">' +
+          '<div class="card-header small text-muted">' +
+            'Version ' + (revisions.length - index) + ' reviewed ' +
+            escapeHtml(formatDate(revision.reviewed_at)) +
+          '</div>' +
+          '<div class="card-body">' +
+            '<div class="markdown-body mb-3">' + renderMarkdown(revision.content) + '</div>' +
+            buildReviewHtml(revision.review) +
+          '</div>' +
+        '</div>'
+      );
+    }).join(""));
+  }
+
   function renderOwnWriteup(sub) {
     var editor = document.getElementById("writeup-editor");
     var reviewed = document.getElementById("writeup-reviewed");
@@ -246,8 +274,12 @@
       editor.classList.remove("d-none");
       reviewed.classList.add("d-none");
       setSafeHtml(badge, '<span class="badge bg-secondary">Not submitted</span>');
+      renderRevisionHistory([]);
       return;
     }
+
+    currentSubmission = sub;
+    renderRevisionHistory(sub.previous_versions || []);
 
     if (sub.status === "reviewed") {
       // Lock editor, show rendered content + review
@@ -275,14 +307,20 @@
         if (sub.review.comment) {
           document.getElementById("review-comment-block").classList.remove("d-none");
           setSafeHtml(document.getElementById("review-comment-text"), renderMarkdown(sub.review.comment));
+        } else {
+          document.getElementById("review-comment-block").classList.add("d-none");
         }
       }
     } else {
       // Draft — show editor pre-filled
       editor.classList.remove("d-none");
       reviewed.classList.add("d-none");
-      setSafeHtml(badge, '<span class="badge bg-warning text-dark">Draft</span>');
+      var label = sub.previous_versions && sub.previous_versions.length ? "Resubmitted" : "Draft";
+      setSafeHtml(badge, '<span class="badge bg-warning text-dark">' + label + '</span>');
       document.getElementById("writeup-content").value = sub.content;
+      document.getElementById("writeup-save-btn").innerHTML =
+        '<i class="fas fa-floppy-disk"></i> ' +
+        (sub.previous_versions && sub.previous_versions.length ? "Update Resubmission" : "Save Writeup");
     }
   }
 
@@ -324,6 +362,15 @@
         status.textContent = "";
         alert("Network error. Please try again.");
       });
+  });
+
+  document.getElementById("revise-writeup-btn").addEventListener("click", function () {
+    if (!currentSubmission) return;
+    document.getElementById("writeup-content").value = currentSubmission.content;
+    document.getElementById("writeup-editor").classList.remove("d-none");
+    document.getElementById("writeup-save-btn").innerHTML =
+      '<i class="fas fa-paper-plane"></i> Submit Revised Writeup';
+    document.getElementById("writeup-content").focus();
   });
 
   // -------------------------------------------------------------------------

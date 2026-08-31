@@ -126,8 +126,15 @@ class WriteupSubmission(db.Model):
         lazy="select",
         cascade="all, delete-orphan",
     )
+    revisions = db.relationship(
+        "WriteupRevision",
+        back_populates="submission",
+        lazy="select",
+        cascade="all, delete-orphan",
+        order_by="WriteupRevision.reviewed_at.desc()",
+    )
 
-    def serialize(self, include_review=False):
+    def serialize(self, include_review=False, include_revisions=False):
         data = {
             "id": self.id,
             "challenge_id": self.challenge_id,
@@ -148,6 +155,8 @@ class WriteupSubmission(db.Model):
             }
         else:
             data["review"] = None
+        if include_revisions:
+            data["previous_versions"] = [revision.serialize() for revision in self.revisions]
         return data
 
 
@@ -211,6 +220,34 @@ class WriteupReview(db.Model):
             "max_score": self.max_score,
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class WriteupRevision(db.Model):
+    """A reviewed writeup version retained when its author resubmits."""
+
+    __tablename__ = "writeup_revisions"
+
+    id = db.Column(db.Integer, primary_key=True)
+    submission_id = db.Column(
+        db.Integer,
+        db.ForeignKey("writeup_submissions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    content = db.Column(db.Text, nullable=False)
+    review_snapshot = db.Column(db.JSON, nullable=True)
+    reviewed_at = db.Column(
+        db.DateTime, nullable=False, default=datetime.datetime.utcnow
+    )
+
+    submission = db.relationship("WriteupSubmission", back_populates="revisions")
+
+    def serialize(self):
+        return {
+            "id": self.id,
+            "content": self.content,
+            "review": self.review_snapshot,
+            "reviewed_at": self.reviewed_at.isoformat(),
         }
 
 
@@ -683,14 +720,16 @@ def get_my_writeup():
     ).first()
     if not sub:
         return jsonify({"success": True, "data": None})
-    return jsonify({"success": True, "data": sub.serialize(include_review=True)})
+    return jsonify(
+        {"success": True, "data": sub.serialize(include_review=True, include_revisions=True)}
+    )
 
 
 @discussion_bp.route("/api/v1/discussion/writeups", methods=["POST"])
 @authed_only
 @ratelimit(method="POST", limit=10, interval=60, key_prefix="discussion_writeup")
 def save_writeup():
-    """Create or update the current user's writeup. Blocked once reviewed."""
+    """Create or update the current user's writeup, reopening reviewed work as a revision."""
     data = request.get_json(silent=True) or request.form
 
     try:
@@ -716,9 +755,20 @@ def save_writeup():
 
     if sub:
         if sub.status == "reviewed":
-            return jsonify(
-                {"success": False, "errors": "Your writeup has already been reviewed and cannot be edited."}
-            ), 403
+            revision = WriteupRevision(
+                submission_id=sub.id,
+                content=sub.content,
+                review_snapshot=sub.review.serialize() if sub.review else None,
+                reviewed_at=(
+                    (sub.review.updated_at or sub.review.created_at)
+                    if sub.review
+                    else datetime.datetime.utcnow()
+                ),
+            )
+            db.session.add(revision)
+            if sub.review:
+                db.session.delete(sub.review)
+            sub.status = "draft"
         sub.content = content
         sub.updated_at = datetime.datetime.utcnow()
     else:
@@ -730,7 +780,9 @@ def save_writeup():
         db.session.add(sub)
 
     db.session.commit()
-    return jsonify({"success": True, "data": sub.serialize(include_review=True)})
+    return jsonify(
+        {"success": True, "data": sub.serialize(include_review=True, include_revisions=True)}
+    )
 
 
 @discussion_bp.route("/api/v1/discussion/writeups/<int:submission_id>", methods=["DELETE"])
