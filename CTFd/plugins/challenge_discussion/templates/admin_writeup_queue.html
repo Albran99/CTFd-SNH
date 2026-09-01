@@ -31,7 +31,7 @@
       </button>
     </div>
     <div class="d-flex gap-2">
-      <a href="/admin/discussion/rubric" class="btn btn-sm btn-outline-secondary">
+      <a href="rubric" class="btn btn-sm btn-outline-secondary">
         <i class="fas fa-sliders"></i> Manage Rubric
       </a>
       <button class="btn btn-sm btn-success" id="export-csv-btn">
@@ -148,13 +148,14 @@
   }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-<script src="/plugins/challenge_discussion/assets/vendor/purify.min.js"></script>
+<script src="../../plugins/challenge_discussion/assets/vendor/purify.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/highlight.js/dist/highlight.min.js"></script>
 <script>
 (function () {
   "use strict";
 
   var CSRF_TOKEN = window.init ? window.init.csrfNonce : '';
+  var DISCUSSION_API_ROOT = "../../api/v1/discussion";
   var CRITERIA = {{ criteria_json | tojson }};
 
   // -------------------------------------------------------------------------
@@ -249,7 +250,7 @@
 
     if (!CRITERIA.length) {
       inputs = '<div class="alert alert-warning py-2 small">No rubric criteria defined. ' +
-        '<a href="/admin/discussion/rubric">Add criteria</a> before reviewing.</div>';
+        '<a href="rubric">Add criteria</a> before reviewing.</div>';
     }
 
     return (
@@ -364,7 +365,7 @@
     var statusFilter    = document.getElementById("filter-status").value;
     currentChallengeId = challengeFilter || null;
 
-    var url = "/api/v1/discussion/writeups";
+    var url = DISCUSSION_API_ROOT + "/writeups";
     if (challengeFilter) url += "?challenge_id=" + challengeFilter;
 
     var container = document.getElementById("writeups-list");
@@ -377,14 +378,14 @@
     {% endfor %}
 
     var fetchList = challengeFilter
-      ? [fetch("/api/v1/discussion/writeups?challenge_id=" + challengeFilter).then(function (r) { return r.json(); }).then(function (d) {
+      ? [fetch(DISCUSSION_API_ROOT + "/writeups?challenge_id=" + challengeFilter).then(function (r) { return r.json(); }).then(function (d) {
           return (d.data || []).map(function (s) {
             s.challenge_name = challenges.find(function (c) { return c.id === s.challenge_id; }) && challenges.find(function (c) { return c.id === s.challenge_id; }).name || s.challenge_id;
             return s;
           });
         })]
       : challenges.map(function (ch) {
-          return fetch("/api/v1/discussion/writeups?challenge_id=" + ch.id)
+          return fetch(DISCUSSION_API_ROOT + "/writeups?challenge_id=" + ch.id)
             .then(function (r) { return r.json(); })
             .then(function (d) {
               return (d.data || []).map(function (s) { s.challenge_name = ch.name; return s; });
@@ -446,7 +447,7 @@
         var sid = parseInt(btn.dataset.id);
         var username = btn.dataset.username;
         if (!confirm('Delete writeup by "' + username + '"? This cannot be undone.')) return;
-        fetch("/api/v1/discussion/writeups/" + sid, {
+        fetch(DISCUSSION_API_ROOT + "/writeups/" + sid, {
           method: "DELETE",
           headers: { "Content-Type": "application/json", "CSRF-Token": CSRF_TOKEN },
           body: JSON.stringify({}),
@@ -507,7 +508,7 @@
     btn.disabled = true;
     if (statusEl) statusEl.textContent = "Saving…";
 
-    fetch("/api/v1/discussion/writeups/" + sid + "/review", {
+    fetch(DISCUSSION_API_ROOT + "/writeups/" + sid + "/review", {
       method: "POST",
       headers: { "Content-Type": "application/json", "CSRF-Token": CSRF_TOKEN },
       body: JSON.stringify({ scores: scores, comment: comment }),
@@ -558,7 +559,7 @@
 
   document.getElementById("export-csv-btn").addEventListener("click", function () {
     var challengeFilter = document.getElementById("filter-challenge").value;
-    var url = "/api/v1/discussion/grades/export";
+    var url = DISCUSSION_API_ROOT + "/grades/export";
     if (challengeFilter) url += "?challenge_id=" + challengeFilter;
     window.location.href = url;
   });

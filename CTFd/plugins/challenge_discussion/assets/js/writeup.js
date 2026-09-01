@@ -145,7 +145,7 @@
 
   function deleteWriteup(submissionId, cardEl) {
     if (!confirm("Delete this writeup and its review permanently?")) return;
-    fetch("/api/v1/discussion/writeups/" + submissionId, {
+    fetch(DISCUSSION_API_ROOT + "/writeups/" + submissionId, {
       method: "DELETE",
       headers: { "Content-Type": "application/json", "CSRF-Token": CSRF_TOKEN },
       body: JSON.stringify({}),
@@ -338,7 +338,7 @@
     btn.disabled = true;
     status.textContent = "Saving…";
 
-    fetch("/api/v1/discussion/writeups", {
+    fetch(DISCUSSION_API_ROOT + "/writeups", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -379,14 +379,14 @@
 
   function loadPage() {
     // Load own writeup
-    fetch("/api/v1/discussion/writeups/my?challenge_id=" + CHALLENGE_ID)
+    fetch(DISCUSSION_API_ROOT + "/writeups/my?challenge_id=" + CHALLENGE_ID)
       .then(function (r) { return r.json(); })
       .then(function (data) {
         if (data.success) renderOwnWriteup(data.data);
       });
 
     // Load all writeups for the reviewed list
-    fetch("/api/v1/discussion/writeups?challenge_id=" + CHALLENGE_ID)
+    fetch(DISCUSSION_API_ROOT + "/writeups?challenge_id=" + CHALLENGE_ID)
       .then(function (r) { return r.json(); })
       .then(function (data) {
         if (data.success) renderAllWriteups(data.data);

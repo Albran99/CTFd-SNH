@@ -40,9 +40,10 @@
             return a;
         }
 
-        footer.appendChild(makeBtn("General discussion",  "fa-comments",  "btn-outline-info",    "/challenges/" + challengeId + "/discuss/general"));
-        footer.appendChild(makeBtn("Post solution",       "fa-lock",      "btn-outline-warning", "/challenges/" + challengeId + "/discuss/spoiler"));
-        footer.appendChild(makeBtn("Writeup",             "fa-pen-to-square", "btn-outline-success", "/challenges/" + challengeId + "/discuss/writeup"));
+        var challengesRoot = window.location.pathname.endsWith("/") ? window.location.pathname.slice(0, -1) : window.location.pathname;
+        footer.appendChild(makeBtn("General discussion",  "fa-comments",  "btn-outline-info",    challengesRoot + "/" + challengeId + "/discuss/general"));
+        footer.appendChild(makeBtn("Post solution",       "fa-lock",      "btn-outline-warning", challengesRoot + "/" + challengeId + "/discuss/spoiler"));
+        footer.appendChild(makeBtn("Writeup",             "fa-pen-to-square", "btn-outline-success", challengesRoot + "/" + challengeId + "/discuss/writeup"));
     }
 
     document.addEventListener("shown.bs.modal", function (e) {
