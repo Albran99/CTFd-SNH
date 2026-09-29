@@ -920,4 +920,6 @@ def load(app):
     upgrade(plugin_name="challenge_discussion")
     app.register_blueprint(discussion_bp)
     register_plugin_assets_directory(app, base_path="/plugins/challenge_discussion/assets/")
-    register_plugin_script("/plugins/challenge_discussion/assets/js/discussion.js")
+    # A relative path also works when the reverse proxy supplies the app prefix
+    # through SCRIPT_NAME instead of CTFd's APPLICATION_ROOT configuration.
+    register_plugin_script("plugins/challenge_discussion/assets/js/discussion.js")

@@ -87,6 +87,10 @@ def test_plugin_urls_include_application_root():
             in html
         )
         assert 'var DISCUSSION_API_ROOT = "../../../api/v1/discussion";' in html
+        assert (
+            'src="/ctf/plugins/challenge_discussion/assets/js/discussion.js"'
+            in html
+        )
 
         response = client.get(
             f"/challenges/{challenge.id}/discuss/writeup"
@@ -95,3 +99,5 @@ def test_plugin_urls_include_application_root():
         html = response.get_data(as_text=True)
         assert (
             'src="../../../plugins/challenge_discussion/assets/js/writeup.js"'
+            in html
+        )
